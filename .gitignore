@@ -1,0 +1,54 @@
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+venv/
+env/
+.venv/
+
+# Tests & coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+
+# Claude Code internal files
+.claude/
+CLAUDE.md
+plan.txt
+
+# Data volumes (generated at runtime, not source code)
+chroma_data/
+pg_data/
+redis_data/
+
+# MITRE ATT&CK bundle (130 MB, download separately)
+knowledge_base/mitre/enterprise-attack.json
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/

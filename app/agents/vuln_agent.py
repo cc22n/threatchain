@@ -1,0 +1,80 @@
+import time
+import uuid
+import logging
+from sqlalchemy.ext.asyncio import AsyncSession
+from langchain_core.messages import HumanMessage, SystemMessage
+
+from app.agents.base_agent import BaseAgent
+from app.tools.nvd import NVDTool
+from app.tools.cisa_kev import CISAKEVTool
+from app.tools.exploitdb import ExploitDBTool
+from app.llm.router import get_llm_for_agent
+from app.utils import parse_llm_json
+
+logger = logging.getLogger(__name__)
+
+SYSTEM_PROMPT = (
+    "You are a vulnerability analyst. Given CVE data from multiple sources, summarize the vulnerability. "
+    "Return JSON with: cve_id, cvss_score (float), severity (critical/high/medium/low/info), "
+    "is_exploited (bool), has_public_exploit (bool), "
+    "affected_products (list), remediation (string), summary (one paragraph). "
+    "Return ONLY valid JSON."
+)
+
+
+class VulnAgent(BaseAgent):
+    agent_name: str = "vuln"
+
+    def __init__(self, db: AsyncSession, redis_client=None):
+        super().__init__(db)
+        self.nvd = NVDTool(redis_client=redis_client, db=db)
+        self.cisa_kev = CISAKEVTool(redis_client=redis_client, db=db)
+        self.exploitdb = ExploitDBTool(redis_client=redis_client, db=db)
+        self.llm = get_llm_for_agent("vuln")
+
+    async def run(self, ioc_value: str, ioc_type: str, investigation_id: uuid.UUID) -> dict:
+        start = time.monotonic()
+        raw_results = {}
+        errors = {}
+        api_calls = 0
+
+        for tool_name, tool in [
+            ("nvd", self.nvd),
+            ("cisa_kev", self.cisa_kev),
+            ("exploitdb", self.exploitdb),
+        ]:
+            try:
+                raw_results[tool_name] = await tool._arun(ioc_value)
+                api_calls += 1
+            except Exception as e:
+                logger.warning("Tool %s failed: %s", tool_name, e)
+                errors[tool_name] = str(e)
+
+        prompt = f"CVE: {ioc_value}\n\nVulnerability Data:\n{raw_results}"
+        messages = [SystemMessage(content=SYSTEM_PROMPT), HumanMessage(content=prompt)]
+        findings = {}
+        tokens_used = 0
+        llm_model = ""
+        try:
+            response = await self.llm.ainvoke(messages)
+            llm_model = getattr(self.llm, "model_name", "")
+            findings = parse_llm_json(response.content)
+            if hasattr(response, "usage_metadata") and response.usage_metadata:
+                tokens_used = response.usage_metadata.get("total_tokens", 0)
+        except Exception as e:
+            logger.error("LLM parsing failed: %s", e)
+            findings = {"error": str(e)}
+
+        elapsed_ms = int((time.monotonic() - start) * 1000)
+        await self._persist_result(
+            investigation_id=investigation_id,
+            findings=findings,
+            raw_results=raw_results,
+            tokens_used=tokens_used,
+            api_calls_made=api_calls,
+            execution_time_ms=elapsed_ms,
+            llm_model_used=llm_model,
+            errors=errors if errors else None,
+            status="partial" if errors else "success",
+        )
+        return findings

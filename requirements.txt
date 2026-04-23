@@ -1,0 +1,50 @@
+# Core Framework
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+pydantic==2.10.3
+pydantic-settings==2.6.1
+
+# LangChain - versiones fijadas
+langchain==0.3.13
+langchain-community==0.3.13
+langchain-openai==0.2.14
+langchain-google-genai==2.0.7
+langgraph==0.2.60
+
+# Database
+sqlalchemy==2.0.36
+psycopg[async]==3.2.3
+alembic==1.14.0
+
+# Vector Store / RAG
+chromadb==0.5.23
+openai==1.57.4
+
+# Cache / Task Queue
+redis==5.2.1
+celery==5.4.0
+
+# LLM Providers
+anthropic==0.40.0
+groq==0.13.0
+google-generativeai==0.8.3
+
+# Export
+stix2==3.0.1
+reportlab==4.2.5
+jinja2==3.1.4
+weasyprint==63.1
+
+# HTTP
+httpx==0.28.1
+aiohttp==3.11.10
+
+# Testing
+pytest==8.3.4
+pytest-asyncio==0.24.0
+pytest-mock==3.14.0
+
+# Utils
+python-dotenv==1.0.1
+slowapi==0.1.9
+websockets==14.1

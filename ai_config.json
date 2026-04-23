@@ -1,0 +1,46 @@
+{
+  "providers": {
+    "openai": {
+      "api_key_env": "OPENAI_API_KEY",
+      "models": {
+        "gpt-4o": {"tier": "premium", "cost_input_per_m": 2.50, "cost_output_per_m": 10.00},
+        "gpt-4o-mini": {"tier": "cheap", "cost_input_per_m": 0.15, "cost_output_per_m": 0.60}
+      }
+    },
+    "anthropic": {
+      "api_key_env": "ANTHROPIC_API_KEY",
+      "models": {
+        "claude-sonnet-4-6": {"tier": "premium", "cost_input_per_m": 3.00, "cost_output_per_m": 15.00}
+      }
+    },
+    "xai": {
+      "api_key_env": "XAI_API_KEY",
+      "base_url": "https://api.x.ai/v1",
+      "models": {
+        "grok-2-latest": {"tier": "cheap", "cost_input_per_m": 2.00, "cost_output_per_m": 10.00}
+      }
+    },
+    "google": {
+      "api_key_env": "GEMINI_API_KEY",
+      "models": {
+        "gemini-2.0-flash": {"tier": "free", "cost_input_per_m": 0.00, "cost_output_per_m": 0.00},
+        "gemini-2.5-flash-preview-04-17": {"tier": "cheap", "cost_input_per_m": 0.15, "cost_output_per_m": 0.60}
+      }
+    },
+    "groq": {
+      "api_key_env": "GROQ_API_KEY",
+      "models": {
+        "llama-3.3-70b-versatile": {"tier": "free", "cost_input_per_m": 0.00, "cost_output_per_m": 0.00}
+      }
+    }
+  },
+  "agent_routing": {
+    "coordinator": {"primary": "openai/gpt-4o", "fallback": "anthropic/claude-sonnet-4-6"},
+    "recon":       {"primary": "xai/grok-2-latest", "fallback": "google/gemini-2.0-flash"},
+    "malware":     {"primary": "xai/grok-2-latest", "fallback": "google/gemini-2.0-flash"},
+    "vuln":        {"primary": "google/gemini-2.5-flash-preview-04-17", "fallback": "groq/llama-3.3-70b-versatile"},
+    "mitre":       {"primary": "xai/grok-2-latest", "fallback": "google/gemini-2.0-flash"},
+    "osint":       {"primary": "google/gemini-2.5-flash-preview-04-17", "fallback": "groq/llama-3.3-70b-versatile"},
+    "report":      {"primary": "anthropic/claude-sonnet-4-6", "fallback": "openai/gpt-4o"}
+  }
+}

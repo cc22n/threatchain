@@ -1,0 +1,15 @@
+* text=auto
+*.py text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.txt text eol=lf
+*.ini text eol=lf
+*.toml text eol=lf
+*.j2 text eol=lf
+*.sh text eol=lf
+*.env.example text eol=lf
+Dockerfile text eol=lf
+*.bin binary
+*.pyc binary

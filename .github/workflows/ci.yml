@@ -1,0 +1,86 @@
+name: ThreatChain CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: threatchain_user
+          POSTGRES_PASSWORD: threatchain_pass
+          POSTGRES_DB: threatchain_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U threatchain_user"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql+psycopg://threatchain_user:threatchain_pass@localhost:5432/threatchain_test
+      REDIS_URL: redis://localhost:6379/0
+      OPENAI_API_KEY: sk-test-placeholder
+      ANTHROPIC_API_KEY: sk-ant-test-placeholder
+      XAI_API_KEY: xai-test-placeholder
+      GEMINI_API_KEY: gemini-test-placeholder
+      GROQ_API_KEY: groq-test-placeholder
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run Alembic migrations
+        run: alembic upgrade head
+
+      - name: Run tests
+        run: pytest tests/ -v --tb=short -x
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: .pytest_cache/
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Lint with ruff
+        run: ruff check app/ tests/ --select E,F,W --ignore E501

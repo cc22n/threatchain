@@ -1,0 +1,21 @@
+{
+  "apis": {
+    "virustotal":      {"base_url": "https://www.virustotal.com/api/v3",                              "api_key_env": "VIRUSTOTAL_API_KEY",       "rate_limit_per_day": 500,   "rate_limit_per_minute": 4},
+    "abuseipdb":       {"base_url": "https://api.abuseipdb.com/api/v2",                               "api_key_env": "ABUSEIPDB_API_KEY",        "rate_limit_per_day": 1000,  "rate_limit_per_minute": 60},
+    "shodan":          {"base_url": "https://api.shodan.io",                                          "api_key_env": "SHODAN_API_KEY",           "rate_limit_per_day": 100,   "rate_limit_per_minute": 1},
+    "alienvault_otx":  {"base_url": "https://otx.alienvault.com/api/v1",                              "api_key_env": "OTX_API_KEY",              "rate_limit_per_day": 10000, "rate_limit_per_minute": 100},
+    "urlscan":         {"base_url": "https://urlscan.io/api/v1",                                      "api_key_env": "URLSCAN_API_KEY",          "rate_limit_per_day": 50,    "rate_limit_per_minute": 5},
+    "nvd":             {"base_url": "https://services.nvd.nist.gov/rest/json/cves/2.0",               "api_key_env": "NVD_API_KEY",              "rate_limit_per_day": 2000,  "rate_limit_per_minute": 5},
+    "cisa_kev":        {"base_url": "https://www.cisa.gov/sites/default/files/feeds",                 "api_key_env": null,                       "rate_limit_per_day": 1000,  "rate_limit_per_minute": 10},
+    "malwarebazaar":   {"base_url": "https://mb-api.abuse.ch/api/v1",                                 "api_key_env": null,                       "rate_limit_per_day": 10000, "rate_limit_per_minute": 60},
+    "hybrid_analysis": {"base_url": "https://www.hybrid-analysis.com/api/v2",                         "api_key_env": "HYBRID_ANALYSIS_API_KEY",  "rate_limit_per_day": 200,   "rate_limit_per_minute": 5},
+    "greynoise":       {"base_url": "https://api.greynoise.io/v3",                                    "api_key_env": "GREYNOISE_API_KEY",        "rate_limit_per_day": 50,    "rate_limit_per_minute": 10},
+    "pulsedive":       {"base_url": "https://pulsedive.com/api",                                      "api_key_env": "PULSEDIVE_API_KEY",        "rate_limit_per_day": 30,    "rate_limit_per_minute": 5},
+    "threatfox":       {"base_url": "https://threatfox-api.abuse.ch/api/v1",                          "api_key_env": null,                       "rate_limit_per_day": 10000, "rate_limit_per_minute": 60},
+    "phishtank":       {"base_url": "https://checkurl.phishtank.com/checkurl",                        "api_key_env": null,                       "rate_limit_per_day": 10000, "rate_limit_per_minute": 60},
+    "securitytrails":  {"base_url": "https://api.securitytrails.com/v1",                              "api_key_env": "SECURITYTRAILS_API_KEY",   "rate_limit_per_day": 50,    "rate_limit_per_minute": 2},
+    "exploitdb":       {"base_url": "https://www.exploit-db.com/search",                              "api_key_env": null,                       "rate_limit_per_day": 1000,  "rate_limit_per_minute": 10},
+    "threatcrowd":     {"base_url": "https://www.threatcrowd.org/searchApi/v2",                       "api_key_env": null,                       "rate_limit_per_day": 10000, "rate_limit_per_minute": 60},
+    "haveibeenpwned":  {"base_url": "https://haveibeenpwned.com/api/v3",                              "api_key_env": "HIBP_API_KEY",             "rate_limit_per_day": 1500,  "rate_limit_per_minute": 10}
+  }
+}

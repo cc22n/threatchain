@@ -1,0 +1,17 @@
+{
+  "ip_str": "185.220.101.34",
+  "country_name": "Germany",
+  "city": "Frankfurt",
+  "org": "Tor Project",
+  "isp": "Tor Project",
+  "asn": "AS60729",
+  "os": null,
+  "ports": [22, 80, 443, 9001],
+  "hostnames": ["tor-exit.example.com"],
+  "vulns": [],
+  "last_update": "2026-04-14T08:00:00.000Z",
+  "data": [
+    {"port": 22, "transport": "tcp", "product": "OpenSSH", "version": "8.9"},
+    {"port": 9001, "transport": "tcp", "product": "Tor", "version": ""}
+  ]
+}

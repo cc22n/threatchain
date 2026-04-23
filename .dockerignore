@@ -1,0 +1,12 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+chroma_data/
+.git/
+.gitignore
+*.md
+tests/
+htmlcov/
+.coverage
