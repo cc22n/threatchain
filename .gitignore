@@ -52,3 +52,5 @@ desktop.ini
 # Logs
 *.log
 logs/
+API_AUDIT_PLAN.md
+PROGRESS.md
