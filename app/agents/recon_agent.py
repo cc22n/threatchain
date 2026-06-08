@@ -8,6 +8,9 @@ from app.agents.base_agent import BaseAgent
 from app.tools.virustotal import VirusTotalTool
 from app.tools.abuseipdb import AbuseIPDBTool
 from app.tools.shodan import ShodanTool
+from app.tools.urlscan import URLScanTool
+from app.tools.securitytrails import SecurityTrailsTool
+from app.tools.threatfox import ThreatFoxTool
 from app.llm.router import get_llm_for_agent
 from app.utils import parse_llm_json
 
@@ -33,6 +36,9 @@ class ReconAgent(BaseAgent):
         self.vt = VirusTotalTool(redis_client=redis_client, db=db)
         self.abuseipdb = AbuseIPDBTool(redis_client=redis_client, db=db)
         self.shodan = ShodanTool(redis_client=redis_client, db=db)
+        self.urlscan = URLScanTool(redis_client=redis_client, db=db)
+        self.securitytrails = SecurityTrailsTool(redis_client=redis_client, db=db)
+        self.threatfox = ThreatFoxTool(redis_client=redis_client, db=db)
         self.llm = get_llm_for_agent("recon")
 
     async def run(self, ioc_value: str, ioc_type: str, investigation_id: uuid.UUID) -> dict:
@@ -41,11 +47,22 @@ class ReconAgent(BaseAgent):
         errors = {}
         api_calls = 0
 
-        for tool_name, tool, kwargs in [
-            ("virustotal", self.vt, {"ioc_type": ioc_type}),
-            ("abuseipdb", self.abuseipdb, {}),
-            ("shodan", self.shodan, {}),
-        ]:
+        tools_to_run = [("virustotal", self.vt, {"ioc_type": ioc_type})]
+
+        if ioc_type == "ip":
+            tools_to_run += [
+                ("abuseipdb", self.abuseipdb, {}),
+                ("shodan", self.shodan, {}),
+            ]
+        elif ioc_type in ("url", "domain"):
+            tools_to_run.append(("urlscan", self.urlscan, {}))
+
+        if ioc_type == "domain":
+            tools_to_run.append(("securitytrails", self.securitytrails, {}))
+
+        tools_to_run.append(("threatfox", self.threatfox, {}))
+
+        for tool_name, tool, kwargs in tools_to_run:
             try:
                 raw_results[tool_name] = await tool._arun(ioc_value, **kwargs)
                 api_calls += 1

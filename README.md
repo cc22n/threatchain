@@ -219,7 +219,37 @@ alembic/        # Database migrations
 - Redis cache with 24h TTL reduces external API exposure
 - Soft-delete preserves investigation audit trail
 - No API keys in source code; all secrets via environment variables
+---
+# 1. Crea el entorno conda
+  conda create -n ThreatChain python=3.11
+  conda activate ThreatChain
 
+  # 2. Instala dependencias
+  pip install -r requirements.txt
+
+  # 3. Crea el archivo .env
+  copy .env.example .env
+  # Edita .env con tus keys y la URL de tu Postgres local:
+  # DATABASE_URL=postgresql+psycopg://tu_usuario:tu_password@localhost:5432/threatchain
+
+  # 4. Crea la base de datos en PostgreSQL
+  # (en psql o pgAdmin)
+  # CREATE DATABASE threatchain;
+  # CREATE USER threatchain_user WITH PASSWORD 'threatchain_pass';
+  # GRANT ALL PRIVILEGES ON DATABASE threatchain TO threatchain_user;
+
+  # 5. Aplica todas las migraciones (crea todas las tablas + indexes)
+  alembic upgrade head
+
+  # 6. Indexa MITRE ATT&CK (UNA SOLA VEZ)
+  # Descarga enterprise-attack.json y guardalo en knowledge_base/mitre/
+  python -c "from app.rag.loaders.mitre_loader import load_mitre_index; load_mitre_index()"
+
+  # 7. Levanta la API (terminal 1)
+  uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+  # 8. Levanta la UI (terminal 2)
+  streamlit run ui/app.py
 ---
 
 ## Portfolio Context

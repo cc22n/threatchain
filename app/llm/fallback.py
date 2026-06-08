@@ -38,3 +38,7 @@ class LLMWithFallback:
         if self._active is None:
             return "none"
         return getattr(self._active, "model_name", str(self._active))
+
+    @property
+    def model_name(self) -> str:
+        return self.model_used

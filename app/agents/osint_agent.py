@@ -62,6 +62,10 @@ class OsintAgent(BaseAgent):
                 ("phishtank", self.phishtank, {}),
                 ("alienvault_otx", self.otx, {"ioc_type": ioc_type}),
             ],
+            "hash": [
+                ("alienvault_otx", self.otx, {"ioc_type": ioc_type}),
+                ("threatcrowd", self.threatcrowd, {"ioc_type": ioc_type}),
+            ],
             "email": [
                 ("haveibeenpwned", self.hibp, {}),
             ],

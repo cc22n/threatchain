@@ -17,7 +17,9 @@
       "api_key_env": "XAI_API_KEY",
       "base_url": "https://api.x.ai/v1",
       "models": {
-        "grok-2-latest": {"tier": "cheap", "cost_input_per_m": 2.00, "cost_output_per_m": 10.00}
+        "grok-4-1-fast-non-reasoning": {"tier": "cheap", "cost_input_per_m": 0.20, "cost_output_per_m": 0.50},
+        "grok-4-1-fast-reasoning":     {"tier": "premium", "cost_input_per_m": 0.20, "cost_output_per_m": 0.50},
+        "grok-4.20-multi-agent-0309":  {"tier": "premium", "cost_input_per_m": 2.00, "cost_output_per_m": 6.00}
       }
     },
     "google": {
@@ -35,12 +37,12 @@
     }
   },
   "agent_routing": {
-    "coordinator": {"primary": "openai/gpt-4o", "fallback": "anthropic/claude-sonnet-4-6"},
-    "recon":       {"primary": "xai/grok-2-latest", "fallback": "google/gemini-2.0-flash"},
-    "malware":     {"primary": "xai/grok-2-latest", "fallback": "google/gemini-2.0-flash"},
-    "vuln":        {"primary": "google/gemini-2.5-flash-preview-04-17", "fallback": "groq/llama-3.3-70b-versatile"},
-    "mitre":       {"primary": "xai/grok-2-latest", "fallback": "google/gemini-2.0-flash"},
-    "osint":       {"primary": "google/gemini-2.5-flash-preview-04-17", "fallback": "groq/llama-3.3-70b-versatile"},
+    "coordinator": {"primary": "xai/grok-4.20-multi-agent-0309", "fallback": "openai/gpt-4o"},
+    "recon":       {"primary": "xai/grok-4-1-fast-non-reasoning", "fallback": "openai/gpt-4o-mini"},
+    "malware":     {"primary": "xai/grok-4-1-fast-non-reasoning", "fallback": "openai/gpt-4o-mini"},
+    "vuln":        {"primary": "xai/grok-4-1-fast-non-reasoning", "fallback": "openai/gpt-4o-mini"},
+    "mitre":       {"primary": "xai/grok-4-1-fast-non-reasoning", "fallback": "openai/gpt-4o-mini"},
+    "osint":       {"primary": "xai/grok-4-1-fast-non-reasoning", "fallback": "openai/gpt-4o-mini"},
     "report":      {"primary": "anthropic/claude-sonnet-4-6", "fallback": "openai/gpt-4o"}
   }
 }

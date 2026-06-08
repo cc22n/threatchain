@@ -85,7 +85,7 @@ def export_stix(
             pattern=pattern,
             pattern_type="stix",
             labels=labels,
-            valid_from=datetime.now(timezone.utc).isoformat(),
+            valid_from=datetime.now(timezone.utc),
         )
 
         objects = [indicator]
