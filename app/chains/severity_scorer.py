@@ -1,52 +1,86 @@
-def calculate_severity_score(findings: dict) -> tuple[float, str]:
-    score = 0.0
+def _safe_float(value, default: float = 0.0) -> float:
+    """Convert a value to float, returning default on any conversion error."""
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
 
-    recon = findings.get("recon", {})
-    malware = findings.get("malware", {})
-    vuln = findings.get("vuln", {})
-    osint = findings.get("osint", {})
-    mitre = findings.get("mitre", {})
 
-    # Recon signals (max 3.0)
+# Relative weight of each agent in the final score. The score is a weighted
+# average over the agents that actually ran (IOC routing means only a subset
+# runs per investigation), so a single high-signal agent can reach "critical"
+# on its own -- e.g. a CVE investigation only runs VULN + MITRE.
+AGENT_WEIGHTS = {
+    "recon": 1.0,
+    "malware": 1.5,
+    "vuln": 1.5,
+    "osint": 1.0,
+    "mitre": 0.5,
+}
+
+
+def _recon_score(recon: dict) -> float:
+    rep_map = {"malicious": 10.0, "suspicious": 5.0}
     rep = str(recon.get("reputation", "")).lower()
-    if rep == "malicious":
-        score += 3.0
-    elif rep == "suspicious":
-        score += 1.5
+    risk = min(_safe_float(recon.get("risk_score", 0)), 10.0)
+    return max(rep_map.get(rep, 0.0), risk)
 
-    # Malware signals (max 3.0)
+
+def _malware_score(malware: dict) -> float:
+    verdict_map = {"malicious": 10.0, "suspicious": 5.0}
     verdict = str(malware.get("verdict", "")).lower()
-    if verdict == "malicious":
-        score += 3.0
-    elif verdict == "suspicious":
-        score += 1.5
-    threat_score = float(malware.get("threat_score", 0))
-    score += min(threat_score / 10 * 2.0, 2.0)
+    threat = min(_safe_float(malware.get("threat_score", 0)), 10.0)
+    return max(verdict_map.get(verdict, 0.0), threat)
 
-    # Vuln signals (max 2.0)
-    cvss = float(vuln.get("cvss_score", 0))
-    if cvss >= 9.0:
-        score += 2.0
-    elif cvss >= 7.0:
-        score += 1.5
-    elif cvss >= 4.0:
-        score += 0.5
+
+def _vuln_score(vuln: dict) -> float:
+    score = min(_safe_float(vuln.get("cvss_score", 0)), 10.0)
     if vuln.get("is_exploited"):
-        score += 1.0
+        score = min(score + 2.0, 10.0)
+    return score
 
-    # OSINT signals (max 2.0)
-    risk = str(osint.get("risk_level", "")).lower()
-    risk_map = {"critical": 2.0, "high": 1.5, "medium": 0.5, "low": 0.0}
-    score += risk_map.get(risk, 0.0)
 
-    # MITRE signals (max 1.0)
-    technique_count = len(mitre.get("techniques", []))
-    if technique_count >= 3:
-        score += 1.0
-    elif technique_count >= 1:
-        score += 0.5
+def _osint_score(osint: dict) -> float:
+    risk_map = {"critical": 10.0, "high": 7.5, "medium": 5.0, "low": 2.0}
+    return risk_map.get(str(osint.get("risk_level", "")).lower(), 0.0)
 
-    score = round(min(score, 10.0), 1)
+
+def _mitre_score(mitre: dict) -> float:
+    techniques = mitre.get("techniques", [])
+    count = len(techniques) if isinstance(techniques, list) else 0
+    if count >= 3:
+        return 10.0
+    if count == 2:
+        return 7.0
+    if count == 1:
+        return 4.0
+    return 0.0
+
+
+AGENT_SCORERS = {
+    "recon": _recon_score,
+    "malware": _malware_score,
+    "vuln": _vuln_score,
+    "osint": _osint_score,
+    "mitre": _mitre_score,
+}
+
+
+def calculate_severity_score(findings: dict) -> tuple[float, str]:
+    weighted_sum = 0.0
+    total_weight = 0.0
+
+    for agent_name, scorer in AGENT_SCORERS.items():
+        agent_findings = findings.get(agent_name)
+        # Skip agents that did not run or that failed: they must not
+        # dilute the average of the agents that produced real signal.
+        if not isinstance(agent_findings, dict) or "error" in agent_findings:
+            continue
+        weight = AGENT_WEIGHTS[agent_name]
+        weighted_sum += scorer(agent_findings) * weight
+        total_weight += weight
+
+    score = round(weighted_sum / total_weight, 1) if total_weight else 0.0
 
     if score >= 8.0:
         severity = "critical"

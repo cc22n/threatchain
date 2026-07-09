@@ -29,10 +29,13 @@ async def _get_investigation(investigation_id: str, db: AsyncSession) -> Investi
 
 async def _get_report(investigation_id: uuid.UUID, db: AsyncSession) -> Report | None:
     result = await db.execute(
-        select(Report).where(
+        select(Report)
+        .where(
             Report.investigation_id == investigation_id,
             Report.report_format == "markdown",
-        ).order_by(Report.generated_at.desc())
+        )
+        .order_by(Report.generated_at.desc())
+        .limit(1)
     )
     return result.scalar_one_or_none()
 
@@ -73,12 +76,19 @@ async def regenerate_report(
     return {"message": "Report generation started", "investigation_id": investigation_id}
 
 
+_VALID_FORMATS = {"md", "pdf", "stix"}
+
+
 @router.get("/investigations/{investigation_id}/report/download")
 async def download_report(
     investigation_id: str,
-    format: str = "md",
+    fmt: str = "md",
     db: AsyncSession = Depends(get_db),
 ):
+    # Validate format before any DB work to fail fast on bad input.
+    if fmt not in _VALID_FORMATS:
+        raise HTTPException(status_code=422, detail="Invalid format. Use: md, pdf, stix")
+
     inv = await _get_investigation(investigation_id, db)
     report = await _get_report(inv.id, db)
     if not report:
@@ -93,17 +103,18 @@ async def download_report(
         for m in mitre_result.scalars().all()
     ]
 
-    if format == "md":
+    if fmt == "md":
         content = export_markdown(report.content)
         return Response(content=content, media_type="text/markdown",
                         headers={"Content-Disposition": f'attachment; filename="report_{investigation_id[:8]}.md"'})
 
-    if format == "pdf":
+    if fmt == "pdf":
         content = export_pdf(report.content, inv.ioc_value)
         return Response(content=content, media_type="application/pdf",
                         headers={"Content-Disposition": f'attachment; filename="report_{investigation_id[:8]}.pdf"'})
 
-    if format == "stix":
+    # fmt == "stix"
+    try:
         content = export_stix(
             ioc_value=inv.ioc_value,
             ioc_type=inv.ioc_type,
@@ -112,7 +123,7 @@ async def download_report(
             mitre_techniques=mitre_techniques,
             related_iocs=[],
         )
-        return Response(content=content, media_type="application/json",
-                        headers={"Content-Disposition": f'attachment; filename="report_{investigation_id[:8]}.stix.json"'})
-
-    raise HTTPException(status_code=422, detail="Invalid format. Use: md, pdf, stix")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"STIX export failed: {e}")
+    return Response(content=content, media_type="application/json",
+                    headers={"Content-Disposition": f'attachment; filename="report_{investigation_id[:8]}.stix.json"'})

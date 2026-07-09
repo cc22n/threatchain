@@ -1,6 +1,4 @@
 import io
-import json
-import uuid
 import logging
 from datetime import datetime, timezone
 
@@ -55,6 +53,24 @@ def _sanitize_stix_value(value: str) -> str:
     return value.replace("\\", "\\\\").replace("'", "\\'")
 
 
+_HASH_ALGO_BY_LENGTH = {32: "MD5", 40: "SHA-1", 64: "SHA-256"}
+
+
+def _hash_pattern(safe_value: str) -> str:
+    """Build a file hash pattern, detecting the algorithm by length.
+
+    stix2 validates hash values against the declared algorithm, so a
+    hardcoded SHA-256 pattern rejects MD5 and SHA-1 IOCs. Values that do
+    not look like a known hash fall back to a file name match so the
+    export still produces a valid bundle instead of failing.
+    """
+    is_hex = all(c in "0123456789abcdefABCDEF" for c in safe_value)
+    algo = _HASH_ALGO_BY_LENGTH.get(len(safe_value)) if is_hex else None
+    if algo:
+        return f"[file:hashes.'{algo}' = '{safe_value}']"
+    return f"[file:name = '{safe_value}']"
+
+
 def export_stix(
     ioc_value: str,
     ioc_type: str,
@@ -71,7 +87,7 @@ def export_stix(
         pattern_map = {
             "ip": f"[network-traffic:dst_ref.type = 'ipv4-addr' AND network-traffic:dst_ref.value = '{safe_value}']",
             "domain": f"[domain-name:value = '{safe_value}']",
-            "hash": f"[file:hashes.'SHA-256' = '{safe_value}']",
+            "hash": _hash_pattern(safe_value),
             "url": f"[url:value = '{safe_value}']",
             "email": f"[email-addr:value = '{safe_value}']",
         }
@@ -117,6 +133,7 @@ def export_stix(
         return bundle.serialize(pretty=True).encode("utf-8")
 
     except Exception as e:
-        logger.error("STIX export failed: %s", e)
-        fallback = {"error": str(e), "investigation_id": investigation_id, "ioc_value": ioc_value}
-        return json.dumps(fallback, indent=2).encode("utf-8")
+        # Propagate instead of returning an error payload: callers must not
+        # serve a broken bundle as if the export had succeeded.
+        logger.error("STIX export failed for investigation %s: %s", investigation_id, e)
+        raise

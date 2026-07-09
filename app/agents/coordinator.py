@@ -63,7 +63,6 @@ class Coordinator:
             "malware": lambda: MalwareAgent(self.db, self.redis_client),
             "vuln": lambda: VulnAgent(self.db, self.redis_client),
             "osint": lambda: OsintAgent(self.db, self.redis_client),
-            "mitre": lambda: MitreAgent(self.db),
         }
 
         async def _run_one(name: str) -> tuple[str, dict]:
@@ -88,13 +87,19 @@ class Coordinator:
             findings[name] = result
 
         if "mitre" in agents_to_run:
-            context = {k: v for k, v in findings.items() if k != "mitre"}
             merged_context = {}
-            for v in context.values():
-                if isinstance(v, dict):
+            for v in findings.values():
+                if isinstance(v, dict) and "error" not in v:
                     merged_context.update(v)
-            _, mitre_findings = await _run_one("mitre")
-            findings["mitre"] = mitre_findings
+            mitre_agent = MitreAgent(self.db)
+            try:
+                findings["mitre"] = await mitre_agent.run(
+                    ioc_value, ioc_type, inv_id,
+                    context_findings=merged_context or None,
+                )
+            except Exception as e:
+                logger.error("Agent mitre failed: %s", e)
+                findings["mitre"] = {"error": str(e)}
 
         return {**state, "agent_findings": findings}
 
