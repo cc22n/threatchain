@@ -80,6 +80,9 @@ class ReportAgent(BaseAgent):
             mitre_techniques=mitre_techniques,
         )
 
+        # Stage the Report row without committing yet; _persist_result will
+        # add the AgentResult and issue a single commit for both rows, so the
+        # two writes succeed or fail atomically.
         report = Report(
             investigation_id=investigation_id,
             report_format="markdown",
@@ -87,7 +90,6 @@ class ReportAgent(BaseAgent):
             llm_model=report_data.get("_model", ""),
         )
         self.db.add(report)
-        await self.db.commit()
 
         elapsed_ms = int((time.monotonic() - start) * 1000)
         findings = {

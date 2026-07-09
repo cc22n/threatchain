@@ -1,5 +1,4 @@
 import logging
-from datetime import date
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
 from app.models.config import ApiConfig
@@ -12,6 +11,14 @@ class RateLimiter:
         self.db = db
 
     async def check_and_increment(self, api_name: str) -> bool:
+        """
+        Atomically check and increment the daily request counter.
+        The UPDATE is conditional on the limit not being reached, which
+        makes the check+increment a single DB round-trip and eliminates
+        the TOCTOU race when multiple agents query the same API concurrently.
+        Returns True if the request is allowed.
+        """
+        # First verify the API exists and is active (cheap SELECT).
         result = await self.db.execute(
             select(ApiConfig).where(ApiConfig.api_name == api_name)
         )
@@ -23,16 +30,23 @@ class RateLimiter:
             logger.warning("API %s is disabled", api_name)
             return False
 
-        if config.rate_limit_per_day > 0 and config.requests_today >= config.rate_limit_per_day:
-            logger.warning("API %s daily rate limit reached (%d)", api_name, config.rate_limit_per_day)
-            return False
-
-        await self.db.execute(
+        # Atomic conditional increment: only updates the row when the limit
+        # has not been reached yet, so rowcount==0 means the limit is hit.
+        stmt = (
             update(ApiConfig)
             .where(ApiConfig.api_name == api_name)
+            .where(
+                (ApiConfig.rate_limit_per_day == 0)
+                | (ApiConfig.requests_today < ApiConfig.rate_limit_per_day)
+            )
             .values(requests_today=ApiConfig.requests_today + 1)
         )
+        update_result = await self.db.execute(stmt)
         await self.db.commit()
+
+        if update_result.rowcount == 0:
+            logger.warning("API %s daily rate limit reached (%d)", api_name, config.rate_limit_per_day)
+            return False
         return True
 
     async def get_all_status(self) -> list[dict]:

@@ -20,9 +20,11 @@ class MitreAgent(BaseAgent):
         start = time.monotonic()
         query = f"{ioc_type} IOC: {ioc_value}"
         if context_findings:
-            summary = context_findings.get("summary", "")
-            indicators = context_findings.get("key_indicators", [])
+            summary = str(context_findings.get("summary", ""))[:500]
+            indicators = [str(i)[:100] for i in context_findings.get("key_indicators", [])[:10]]
             query += f". Findings: {summary}. Indicators: {', '.join(indicators)}"
+        # Cap total query length to avoid embedding API token limits
+        query = query[:2000]
 
         techniques = await mitre_lookup(query, context_findings)
 

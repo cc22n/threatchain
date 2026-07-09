@@ -8,13 +8,17 @@ def correlate_findings(agent_findings: dict) -> dict:
     related_iocs = []
     for agent_name, findings in agent_findings.items():
         if isinstance(findings, dict):
-            related_iocs.extend(findings.get("related_iocs", []))
+            for ioc in findings.get("related_iocs", []):
+                # Guard: only keep plain strings (LLMs occasionally return
+                # structured dicts here, which would break set deduplication)
+                if isinstance(ioc, str) and ioc:
+                    related_iocs.append(ioc)
 
     return {
         "verdict": verdict,
         "severity": severity,
         "severity_score": severity_score,
-        "related_iocs": list(set(related_iocs)),
+        "related_iocs": list(dict.fromkeys(related_iocs)),  # deduplicate, preserve order
         "agents_completed": list(agent_findings.keys()),
         "technique_count": len(agent_findings.get("mitre", {}).get("techniques", [])),
     }

@@ -13,12 +13,16 @@ MITRE_COLLECTION = "mitre_attack"
 
 
 def _is_indexed(persist_dir: str) -> bool:
-    vs = Chroma(
-        collection_name=MITRE_COLLECTION,
-        embedding_function=get_embeddings(),
-        persist_directory=persist_dir,
-    )
-    count = vs._collection.count()
+    # Use chromadb directly to count documents without constructing an
+    # embedding function, avoiding an unnecessary OpenAI import at startup
+    # and relying only on the public chromadb client API.
+    import chromadb
+    client = chromadb.PersistentClient(path=persist_dir)
+    try:
+        col = client.get_collection(MITRE_COLLECTION)
+        count = col.count()
+    except Exception:
+        count = 0
     logger.info("ChromaDB mitre_attack collection has %d documents", count)
     return count > 0
 

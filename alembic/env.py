@@ -19,9 +19,12 @@ target_metadata = Base.metadata
 
 
 def _get_url() -> str:
-    url = os.environ.get("DATABASE_URL", "")
-    # Alembic necesita driver sincrono; psycopg v3 soporta ambos con el mismo prefijo
-    # pero si usas postgresql+psycopg, SQLAlchemy sync lo maneja bien
+    url = os.environ.get("DATABASE_URL")
+    if not url:
+        raise RuntimeError(
+            "DATABASE_URL environment variable is not set. "
+            "Copy .env.example to .env and fill in your credentials."
+        )
     return url
 
 

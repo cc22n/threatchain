@@ -30,7 +30,7 @@ class URLScanTool(ThreatIntelTool):
             if not scan_uuid:
                 return {"uuid": "", "result": result_url, "verdicts": {}}
 
-            # Poll for results — URLScan analysis takes ~10 s
+            # Poll for results - URLScan analysis takes ~10 s
             for _ in range(_POLL_RETRIES):
                 await asyncio.sleep(_POLL_INTERVAL)
                 try:

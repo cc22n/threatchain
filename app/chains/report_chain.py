@@ -8,6 +8,22 @@ from app.utils import parse_llm_json
 
 TEMPLATES_DIR = Path(__file__).parent.parent.parent / "templates"
 
+# Module-level Jinja2 environment to avoid reconstructing it on every render
+def _make_jinja_env() -> Environment:
+    env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)))
+    env.filters["tojson"] = lambda v, indent=2: json.dumps(v, indent=indent, default=str)
+    return env
+
+_jinja_env: Environment | None = None
+
+
+def _get_jinja_env() -> Environment:
+    global _jinja_env
+    if _jinja_env is None:
+        _jinja_env = _make_jinja_env()
+    return _jinja_env
+
+
 SYSTEM_PROMPT = """You are a senior SOC analyst writing a professional threat intelligence report.
 Given investigation findings from multiple specialized agents, produce a structured analysis.
 
@@ -61,8 +77,7 @@ def render_markdown_report(
     agent_findings: dict,
     mitre_techniques: list,
 ) -> str:
-    env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)))
-    env.filters["tojson"] = lambda v, indent=2: json.dumps(v, indent=indent, default=str)
+    env = _get_jinja_env()
     template = env.get_template("report.md.j2")
     return template.render(
         ioc_value=ioc_value,

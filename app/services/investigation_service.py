@@ -44,9 +44,14 @@ async def run_investigation(
         investigation.execution_time_seconds = round(time.monotonic() - start, 2)
     except Exception as e:
         logger.error("Investigation %s failed: %s", investigation.id, e)
-        # Roll back any partial writes from the coordinator/agents before
-        # writing the final "failed" status, so the session is clean.
+        # Roll back any partial writes from the coordinator/agents so the
+        # session is clean before writing the final "failed" status.
+        # After rollback the in-memory `investigation` object is no longer
+        # attached, so we re-fetch it by primary key before updating it.
+        inv_id = investigation.id
         await db.rollback()
+        result = await db.execute(select(Investigation).where(Investigation.id == inv_id))
+        investigation = result.scalar_one()
         investigation.status = "failed"
         investigation.execution_time_seconds = round(time.monotonic() - start, 2)
 

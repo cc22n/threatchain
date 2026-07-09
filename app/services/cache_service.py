@@ -53,13 +53,28 @@ class CacheService:
             return False
 
 
+_redis_client = None
+_redis_initialized = False
+
+
 def get_redis_client():
+    """
+    Return a module-level Redis client singleton.
+    The connection is established once on first call; subsequent calls
+    return the cached client without a new ping.  Returns None if Redis
+    is unavailable so callers can operate in cache-disabled mode.
+    """
+    global _redis_client, _redis_initialized
+    if _redis_initialized:
+        return _redis_client
+    _redis_initialized = True
     try:
         import redis
         from app.config import settings
         client = redis.from_url(settings.REDIS_URL, decode_responses=True)
         client.ping()
-        return client
+        _redis_client = client
+        return _redis_client
     except Exception as e:
         logger.warning("Redis not available: %s", e)
         return None
