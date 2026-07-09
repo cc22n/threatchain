@@ -70,11 +70,24 @@ def calculate_severity_score(findings: dict) -> tuple[float, str]:
     weighted_sum = 0.0
     total_weight = 0.0
 
-    for agent_name, scorer in AGENT_SCORERS.items():
+    def _usable(agent_name: str) -> dict | None:
         agent_findings = findings.get(agent_name)
-        # Skip agents that did not run or that failed: they must not
-        # dilute the average of the agents that produced real signal.
+        # Agents that did not run or that failed must not dilute the
+        # average of the agents that produced real signal.
         if not isinstance(agent_findings, dict) or "error" in agent_findings:
+            return None
+        return agent_findings
+
+    # MITRE similarity search always returns matches, even for an IOC with
+    # no intel behind it, so it only counts as supporting evidence when at
+    # least one primary agent produced usable findings.
+    has_primary_signal = any(_usable(name) is not None for name in AGENT_SCORERS if name != "mitre")
+
+    for agent_name, scorer in AGENT_SCORERS.items():
+        if agent_name == "mitre" and not has_primary_signal:
+            continue
+        agent_findings = _usable(agent_name)
+        if agent_findings is None:
             continue
         weight = AGENT_WEIGHTS[agent_name]
         weighted_sum += scorer(agent_findings) * weight

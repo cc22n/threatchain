@@ -63,3 +63,15 @@ def test_determine_verdict_benign():
 def test_determine_verdict_unknown():
     findings = {}
     assert determine_verdict(findings, "medium") == "unknown"
+
+
+def test_mitre_alone_does_not_score():
+    # Similarity search always returns matches, so MITRE-only findings
+    # (all primary agents failed or absent) must not drive the score.
+    findings = {
+        "recon": {"error": "all tools failed"},
+        "mitre": {"techniques": [{"id": "T1090"}, {"id": "T1071"}, {"id": "T1059"}]},
+    }
+    score, severity = calculate_severity_score(findings)
+    assert score == 0.0
+    assert severity == "info"

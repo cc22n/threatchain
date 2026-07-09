@@ -2,10 +2,12 @@ import asyncio
 import time
 import uuid
 import logging
+from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 
 from app.models.investigation import Investigation
+from app.models.agent_result import AgentResult
 from app.chains.ioc_classifier import IocClassifier
 from app.agents.coordinator import Coordinator
 
@@ -42,6 +44,18 @@ async def run_investigation(
         investigation.severity_score = correlation.get("severity_score")
         investigation.agents_used = correlation.get("agents_completed", [])
         investigation.execution_time_seconds = round(time.monotonic() - start, 2)
+
+        totals = await db.execute(
+            select(
+                func.coalesce(func.sum(AgentResult.tokens_used), 0),
+                func.coalesce(func.sum(AgentResult.api_calls_made), 0),
+            ).where(AgentResult.investigation_id == investigation.id)
+        )
+        total_tokens, total_api_calls = totals.one()
+        investigation.total_tokens_used = total_tokens
+        investigation.total_api_calls = total_api_calls
+        # Column is TIMESTAMP without time zone; store naive UTC.
+        investigation.completed_at = datetime.now(timezone.utc).replace(tzinfo=None)
     except Exception as e:
         logger.error("Investigation %s failed: %s", investigation.id, e)
         # Roll back any partial writes from the coordinator/agents so the

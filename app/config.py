@@ -1,6 +1,12 @@
+from dotenv import load_dotenv
 from pydantic_settings import BaseSettings
 from pydantic import field_validator
 from typing import List
+
+# pydantic-settings reads .env only for the fields declared on Settings;
+# tools and LLM providers read their API keys from os.environ directly,
+# so .env must also be loaded into the process environment.
+load_dotenv()
 
 
 class Settings(BaseSettings):

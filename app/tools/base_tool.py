@@ -7,6 +7,7 @@ from abc import abstractmethod
 from typing import Any
 
 from langchain_core.tools import BaseTool
+from pydantic import ConfigDict
 
 logger = logging.getLogger(__name__)
 
@@ -21,8 +22,7 @@ class ThreatIntelTool(BaseTool):
     # Optional AsyncSession; when provided, rate limit counters are enforced via DB.
     db: Any = None
 
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     @abstractmethod
     async def _call_api(self, ioc_value: str, **kwargs) -> dict: ...
@@ -37,6 +37,15 @@ class ThreatIntelTool(BaseTool):
         if not key:
             raise ValueError(f"Missing env var: {self.api_key_env}")
         return key
+
+    def _redact_secrets(self, text: str) -> str:
+        """Strip the API key from error text: some upstream errors (e.g.
+        httpx status errors) embed the full request URL, and agents persist
+        the error string in the database."""
+        key = os.environ.get(self.api_key_env, "") if self.api_key_env else ""
+        if key:
+            text = text.replace(key, "***")
+        return text
 
     def _cache_get(self, key: str) -> dict | None:
         if self.redis_client is None:
@@ -68,7 +77,12 @@ class ThreatIntelTool(BaseTool):
                 raise RuntimeError(f"Rate limit reached for {self.api_name}")
 
         start = time.monotonic()
-        raw = await self._call_api(ioc_value, **kwargs)
+        try:
+            raw = await self._call_api(ioc_value, **kwargs)
+        except Exception as e:
+            raise RuntimeError(
+                f"{self.api_name} call failed: {self._redact_secrets(str(e))}"
+            ) from None
         elapsed_ms = int((time.monotonic() - start) * 1000)
 
         normalized = self._normalize(raw)
