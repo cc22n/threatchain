@@ -2,6 +2,9 @@ import httpx
 from app.tools.base_tool import ThreatIntelTool
 
 
+# DEPRECATED: the ThreatCrowd service is offline (DNS no longer resolves).
+# The tool is kept for reference but is not wired into any agent and is
+# seeded as inactive in api_configs.
 class ThreatCrowdTool(ThreatIntelTool):
     name: str = "threatcrowd"
     description: str = "Get relationship graphs for IPs, domains, and hashes from ThreatCrowd"

@@ -8,7 +8,6 @@ from app.agents.base_agent import BaseAgent
 from app.tools.alienvault_otx import AlienVaultOTXTool
 from app.tools.greynoise import GreyNoiseTool
 from app.tools.pulsedive import PulsediveTool
-from app.tools.threatcrowd import ThreatCrowdTool
 from app.tools.phishtank import PhishTankTool
 from app.tools.haveibeenpwned import HaveIBeenPwnedTool
 from app.llm.router import get_llm_for_agent
@@ -35,7 +34,6 @@ class OsintAgent(BaseAgent):
         self.greynoise = GreyNoiseTool(redis_client=redis_client, db=db)
         self.otx = AlienVaultOTXTool(redis_client=redis_client, db=db)
         self.pulsedive = PulsediveTool(redis_client=redis_client, db=db)
-        self.threatcrowd = ThreatCrowdTool(redis_client=redis_client, db=db)
         self.phishtank = PhishTankTool(redis_client=redis_client, db=db)
         self.hibp = HaveIBeenPwnedTool(redis_client=redis_client, db=db)
         self.llm = get_llm_for_agent("osint")
@@ -51,12 +49,10 @@ class OsintAgent(BaseAgent):
                 ("greynoise", self.greynoise, {}),
                 ("alienvault_otx", self.otx, {"ioc_type": ioc_type}),
                 ("pulsedive", self.pulsedive, {}),
-                ("threatcrowd", self.threatcrowd, {"ioc_type": ioc_type}),
             ],
             "domain": [
                 ("alienvault_otx", self.otx, {"ioc_type": ioc_type}),
                 ("pulsedive", self.pulsedive, {}),
-                ("threatcrowd", self.threatcrowd, {"ioc_type": ioc_type}),
             ],
             "url": [
                 ("phishtank", self.phishtank, {}),
@@ -64,7 +60,6 @@ class OsintAgent(BaseAgent):
             ],
             "hash": [
                 ("alienvault_otx", self.otx, {"ioc_type": ioc_type}),
-                ("threatcrowd", self.threatcrowd, {"ioc_type": ioc_type}),
             ],
             "email": [
                 ("haveibeenpwned", self.hibp, {}),

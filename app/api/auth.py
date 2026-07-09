@@ -1,3 +1,4 @@
+import secrets
 from fastapi import Header, HTTPException, status
 from app.config import settings
 
@@ -9,7 +10,8 @@ async def require_api_key(x_api_key: str = Header(default="")) -> None:
     """
     if not settings.API_KEY:
         return
-    if x_api_key != settings.API_KEY:
+    # Constant-time comparison to avoid leaking the key via timing.
+    if not secrets.compare_digest(x_api_key, settings.API_KEY):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing X-API-Key header",

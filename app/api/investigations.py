@@ -71,6 +71,7 @@ async def get_agent_results(investigation_id: str, db: AsyncSession = Depends(ge
             "agent_name": a.agent_name,
             "status": a.status,
             "findings": a.findings,
+            "llm_model_used": a.llm_model_used,
             "tokens_used": a.tokens_used,
             "api_calls_made": a.api_calls_made,
             "execution_time_ms": a.execution_time_ms,

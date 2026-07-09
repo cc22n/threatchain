@@ -20,7 +20,7 @@ SYSTEM_PROMPT = (
     "You are a SOC Level 1 analyst specializing in network reconnaissance. "
     "Given threat intelligence data from multiple sources, extract the key findings "
     "and produce a concise JSON summary with these fields: "
-    "reputation (malicious/suspicious/benign/unknown), "
+    "reputation (exactly one of, lowercase: malicious, suspicious, benign, unknown), "
     "risk_score (0-10), "
     "key_indicators (list of strings), "
     "summary (one paragraph). "
