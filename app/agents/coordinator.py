@@ -14,6 +14,7 @@ from app.agents.mitre_agent import MitreAgent
 from app.agents.report_agent import ReportAgent
 from app.chains.correlation_chain import correlate_findings
 from app.models.investigation import Investigation
+from app.services import progress
 
 logger = logging.getLogger(__name__)
 
@@ -65,14 +66,23 @@ class Coordinator:
             "osint": lambda: OsintAgent(self.db, self.redis_client),
         }
 
+        def _notify_agent_done(name: str, result: dict) -> None:
+            progress.publish(state["investigation_id"], {
+                "event": "agent_completed",
+                "investigation_id": state["investigation_id"],
+                "agent": name,
+                "agent_status": "error" if "error" in result else "success",
+            })
+
         async def _run_one(name: str) -> tuple[str, dict]:
             agent = agent_map[name]()
             try:
                 result = await agent.run(ioc_value, ioc_type, inv_id)
-                return name, result
             except Exception as e:
                 logger.error("Agent %s failed: %s", name, e)
-                return name, {"error": str(e)}
+                result = {"error": str(e)}
+            _notify_agent_done(name, result)
+            return name, result
 
         non_mitre = [n for n in agents_to_run if n != "mitre"]
         tasks = [_run_one(name) for name in non_mitre]
@@ -100,6 +110,7 @@ class Coordinator:
             except Exception as e:
                 logger.error("Agent mitre failed: %s", e)
                 findings["mitre"] = {"error": str(e)}
+            _notify_agent_done("mitre", findings["mitre"])
 
         return {**state, "agent_findings": findings}
 
@@ -122,6 +133,10 @@ class Coordinator:
             try:
                 report_agent = ReportAgent(db=self.db)
                 await report_agent.run(ioc_value, ioc_type, investigation_id)
+                progress.publish(str(investigation_id), {
+                    "event": "report_generated",
+                    "investigation_id": str(investigation_id),
+                })
             except Exception as e:
                 logger.error("ReportAgent failed: %s", e)
 

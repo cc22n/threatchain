@@ -10,6 +10,7 @@ from app.models.investigation import Investigation
 from app.models.agent_result import AgentResult
 from app.chains.ioc_classifier import IocClassifier
 from app.agents.coordinator import Coordinator
+from app.services import progress
 
 logger = logging.getLogger(__name__)
 classifier = IocClassifier()
@@ -20,17 +21,39 @@ async def run_investigation(
     ioc_type: str | None,
     db: AsyncSession,
     redis_client=None,
+    investigation_id: uuid.UUID | None = None,
 ) -> Investigation:
+    """Run a full investigation.
+
+    When investigation_id is given, an existing (pending) row is reused so
+    callers can hand out the id before the run starts (async mode); the
+    row is flipped to "running". Otherwise a new row is created.
+    """
     resolved_type = ioc_type or classifier.classify(ioc_value)["type"]
 
-    investigation = Investigation(
-        ioc_value=ioc_value,
-        ioc_type=resolved_type,
-        status="running",
-    )
-    db.add(investigation)
+    if investigation_id is not None:
+        result = await db.execute(
+            select(Investigation).where(Investigation.id == investigation_id)
+        )
+        investigation = result.scalar_one()
+        investigation.status = "running"
+    else:
+        investigation = Investigation(
+            ioc_value=ioc_value,
+            ioc_type=resolved_type,
+            status="running",
+        )
+        db.add(investigation)
     await db.commit()
     await db.refresh(investigation)
+
+    progress.publish(str(investigation.id), {
+        "event": "investigation_started",
+        "investigation_id": str(investigation.id),
+        "ioc_value": ioc_value,
+        "ioc_type": resolved_type,
+        "status": "running",
+    })
 
     start = time.monotonic()
     try:
@@ -71,6 +94,15 @@ async def run_investigation(
 
     await db.commit()
     await db.refresh(investigation)
+
+    progress.publish(str(investigation.id), {
+        "event": "investigation_finished",
+        "investigation_id": str(investigation.id),
+        "status": investigation.status,
+        "verdict": investigation.verdict,
+        "severity": investigation.severity,
+        "severity_score": float(investigation.severity_score) if investigation.severity_score is not None else None,
+    })
     return investigation
 
 

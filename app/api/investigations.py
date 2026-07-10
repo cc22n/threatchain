@@ -21,13 +21,39 @@ _classifier = IocClassifier()
 
 @router.post("/investigate", response_model=InvestigationResponse, status_code=201,
              dependencies=[Depends(require_api_key)])
-async def start_investigation(payload: InvestigationCreate, db: AsyncSession = Depends(get_db)):
+async def start_investigation(
+    payload: InvestigationCreate,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
     ioc_type = payload.ioc_type or _classifier.classify(payload.ioc_value)["type"]
     if ioc_type == "unknown":
         raise HTTPException(status_code=422, detail="Could not classify IOC type")
 
     redis = get_redis_client()
-    investigation = await run_investigation(payload.ioc_value, ioc_type, db, redis)
+
+    if payload.wait:
+        return await run_investigation(payload.ioc_value, ioc_type, db, redis)
+
+    # Async mode: hand out the id immediately so the client can follow
+    # progress on /ws/investigation/{id}; the run gets its own session
+    # because the request session closes when the response is sent.
+    investigation = Investigation(
+        ioc_value=payload.ioc_value, ioc_type=ioc_type, status="pending"
+    )
+    db.add(investigation)
+    await db.commit()
+    await db.refresh(investigation)
+    inv_id = investigation.id
+
+    async def _run():
+        from app.database import AsyncSessionLocal
+        async with AsyncSessionLocal() as session:
+            await run_investigation(
+                payload.ioc_value, ioc_type, session, redis, investigation_id=inv_id
+            )
+
+    background_tasks.add_task(_run)
     return investigation
 
 

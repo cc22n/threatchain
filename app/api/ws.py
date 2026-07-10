@@ -6,23 +6,36 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlalchemy import select
 from app.database import AsyncSessionLocal
 from app.models.investigation import Investigation
+from app.services import progress
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-_connections: dict[str, list[WebSocket]] = {}
+# Poll fallback interval: covers events lost because the publisher runs in
+# another worker process (the progress bus is in-process only).
+_POLL_FALLBACK_SECONDS = 10
 
 
-async def broadcast(investigation_id: str, message: dict) -> None:
-    sockets = _connections.get(investigation_id, [])
-    dead = []
-    for ws in sockets:
-        try:
-            await ws.send_text(json.dumps(message))
-        except Exception:
-            dead.append(ws)
-    for ws in dead:
-        sockets.remove(ws)
+async def _snapshot(inv_uuid: uuid.UUID) -> dict | None:
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(Investigation).where(Investigation.id == inv_uuid)
+        )
+        inv = result.scalar_one_or_none()
+        if inv is None:
+            return None
+        return {
+            "event": "snapshot",
+            "investigation_id": str(inv.id),
+            "status": inv.status,
+            "verdict": inv.verdict,
+            "severity": inv.severity,
+            "severity_score": float(inv.severity_score) if inv.severity_score is not None else None,
+        }
+
+
+def _is_terminal(message: dict) -> bool:
+    return message.get("status") in ("completed", "failed", "cancelled")
 
 
 @router.websocket("/ws/investigation/{investigation_id}")
@@ -35,37 +48,36 @@ async def investigation_ws(websocket: WebSocket, investigation_id: str):
         return
 
     await websocket.accept()
-    _connections.setdefault(investigation_id, []).append(websocket)
+
+    snapshot = await _snapshot(inv_uuid)
+    if snapshot is None:
+        await websocket.send_text(json.dumps({
+            "investigation_id": investigation_id,
+            "error": "investigation not found",
+        }))
+        await websocket.close()
+        return
+
+    await websocket.send_text(json.dumps(snapshot))
+    if _is_terminal(snapshot):
+        await websocket.close()
+        return
+
+    queue = progress.subscribe(investigation_id)
     try:
         while True:
-            async with AsyncSessionLocal() as db:
-                result = await db.execute(
-                    # Use the typed uuid.UUID so the column comparison works correctly
-                    select(Investigation).where(Investigation.id == inv_uuid)
-                )
-                inv = result.scalar_one_or_none()
-                if inv:
-                    await websocket.send_text(json.dumps({
-                        "investigation_id": investigation_id,
-                        "status": inv.status,
-                        "verdict": inv.verdict,
-                        "severity": inv.severity,
-                        "severity_score": float(inv.severity_score) if inv.severity_score else None,
-                    }))
-                    if inv.status in ("completed", "failed"):
-                        break
-                else:
-                    await websocket.send_text(json.dumps({
-                        "investigation_id": investigation_id,
-                        "error": "investigation not found",
-                    }))
+            try:
+                event = await asyncio.wait_for(queue.get(), timeout=_POLL_FALLBACK_SECONDS)
+            except asyncio.TimeoutError:
+                event = await _snapshot(inv_uuid)
+                if event is None:
                     break
-            await asyncio.sleep(2)
+            await websocket.send_text(json.dumps(event))
+            if _is_terminal(event):
+                break
     except WebSocketDisconnect:
         pass
     except Exception as e:
         logger.error("WebSocket error for %s: %s", investigation_id, e)
     finally:
-        sockets = _connections.get(investigation_id, [])
-        if websocket in sockets:
-            sockets.remove(websocket)
+        progress.unsubscribe(investigation_id, queue)
