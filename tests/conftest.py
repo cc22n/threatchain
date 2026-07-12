@@ -52,3 +52,15 @@ def abuseipdb_response():
 def shodan_response():
     with open(FIXTURES / "sample_shodan_response.json") as f:
         return json.load(f)
+
+
+@pytest.fixture
+def threatfox_response():
+    with open(FIXTURES / "sample_threatfox_response.json") as f:
+        return json.load(f)
+
+
+@pytest.fixture
+def malwarebazaar_response():
+    with open(FIXTURES / "sample_malwarebazaar_response.json") as f:
+        return json.load(f)

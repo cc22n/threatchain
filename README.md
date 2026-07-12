@@ -108,9 +108,13 @@ pip install -r requirements.txt
 # Start PostgreSQL and Redis (or use Docker)
 alembic upgrade head
 
-uvicorn app.main:app --reload        # API on :8000
+python -m app.main                   # API on :8000
 streamlit run ui/app.py              # UI on :8501
 ```
+
+> **Note:** start the API with `python -m app.main`, not the `uvicorn` CLI.
+> On Windows the uvicorn CLI forces the ProactorEventLoop, which psycopg
+> async cannot use; the module entry point installs the Selector loop first.
 
 ---
 
@@ -135,6 +139,25 @@ streamlit run ui/app.py              # UI on :8501
 
 Full Swagger docs: `http://localhost:8000/docs`
 
+### Async mode and real-time progress
+
+By default `POST /investigate` blocks until the investigation finishes.
+Pass `"wait": false` to get the investigation id immediately (status
+`pending`) and follow progress over the WebSocket:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/investigate \
+  -H "Content-Type: application/json" \
+  -d '{"ioc_value": "8.8.8.8", "wait": false}'
+# -> {"id": "<uuid>", "status": "pending", ...}
+```
+
+`WS /ws/investigation/{id}` then streams JSON events: `snapshot` (state on
+connect), `investigation_started`, one `agent_completed` per agent (with
+`agent_status`), `report_generated`, and a final `investigation_finished`
+with verdict, severity and score. The Streamlit UI uses this flow to show
+live per-agent progress.
+
 ---
 
 ## Threat Intelligence APIs (17 Tools)
@@ -156,7 +179,7 @@ Full Swagger docs: `http://localhost:8000/docs`
 | 13 | PhishTank | URL, Domain | OSINT |
 | 14 | SecurityTrails | Domain | RECON |
 | 15 | ExploitDB | CVE | VULN |
-| 16 | ThreatCrowd | IP, Domain, Hash | OSINT |
+| 16 | ThreatCrowd | IP, Domain, Hash | Retired (service offline) |
 | 17 | HaveIBeenPwned | Email, Domain | OSINT |
 | 18 | MITRE ATT&CK | Techniques (RAG) | MITRE |
 

@@ -49,6 +49,9 @@ knowledge_base/mitre/enterprise-attack.json
 Thumbs.db
 desktop.ini
 
+# Graphify knowledge graph output
+graphify-out
+
 # Logs
 *.log
 logs/

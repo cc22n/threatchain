@@ -6,14 +6,17 @@ class ThreatFoxTool(ThreatIntelTool):
     name: str = "threatfox"
     description: str = "Search ThreatFox IOC database for malware associations"
     api_name: str = "threatfox"
-    api_key_env: str = ""
-    base_url: str = "https://threatfox-api.abuse.ch/api/v1"
+    api_key_env: str = "ABUSECH_AUTH_KEY"
+    base_url: str = "https://threatfox-api.abuse.ch/api/v1/"
 
     async def _call_api(self, ioc_value: str, **kwargs) -> dict:
+        api_key = self._get_api_key()
+        headers = {"Auth-Key": api_key} if api_key else {}
         async with httpx.AsyncClient() as client:
             resp = await client.post(
                 self.base_url,
                 json={"query": "search_ioc", "search_term": ioc_value},
+                headers=headers,
                 timeout=15,
             )
             resp.raise_for_status()
@@ -21,13 +24,13 @@ class ThreatFoxTool(ThreatIntelTool):
 
     def _normalize(self, raw: dict) -> dict:
         if raw.get("query_status") != "ok":
-            return {"source": "threatfox", "found": False}
+            return {"source": self.api_name, "found": False}
         data = raw.get("data", [])
         if not data:
-            return {"source": "threatfox", "found": False}
+            return {"source": self.api_name, "found": False}
         entry = data[0]
         return {
-            "source": "threatfox",
+            "source": self.api_name,
             "found": True,
             "ioc_type": entry.get("ioc_type", ""),
             "threat_type": entry.get("threat_type", ""),

@@ -1,0 +1,21 @@
+{
+  "query_status": "ok",
+  "data": [
+    {
+      "ioc_id": "12345",
+      "ioc_type": "domain",
+      "ioc_value": "malicious.example.com",
+      "threat_type": "botnet",
+      "malware": "Emotet",
+      "malware_alias": "Heodo",
+      "confidence_level": 95,
+      "first_seen": "2024-06-15 10:23:00 UTC",
+      "last_seen": "2024-07-10 15:45:00 UTC",
+      "tags": [
+        "banking_trojan",
+        "c2_server",
+        "emotet"
+      ]
+    }
+  ]
+}

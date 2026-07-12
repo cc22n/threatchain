@@ -1,7 +1,11 @@
 import streamlit as st
 import httpx
+import sys
+from pathlib import Path
 
-API_BASE = "http://localhost:8000/api/v1"
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from api_utils import API_BASE, get_headers
 
 st.set_page_config(page_title="API Health", layout="wide")
 st.title("API & LLM Health Dashboard")
@@ -11,7 +15,7 @@ col_left, col_right = st.columns(2)
 with col_left:
     st.subheader("Threat Intel APIs")
     try:
-        resp = httpx.get(f"{API_BASE}/health/apis", timeout=10)
+        resp = httpx.get(f"{API_BASE}/health/apis", headers=get_headers(), timeout=10)
         if resp.status_code == 200:
             data = resp.json()
             for api in data.get("apis", []):
@@ -31,7 +35,7 @@ with col_left:
 with col_right:
     st.subheader("LLM Providers")
     try:
-        resp = httpx.get(f"{API_BASE}/health/llms", timeout=10)
+        resp = httpx.get(f"{API_BASE}/health/llms", headers=get_headers(), timeout=10)
         if resp.status_code == 200:
             data = resp.json()
             for provider in data.get("providers", []):
@@ -49,7 +53,7 @@ with col_right:
 st.divider()
 st.subheader("Global Statistics")
 try:
-    resp = httpx.get(f"{API_BASE}/stats", timeout=10)
+    resp = httpx.get(f"{API_BASE}/stats", headers=get_headers(), timeout=10)
     if resp.status_code == 200:
         stats = resp.json()
         c1, c2, c3, c4, c5 = st.columns(5)
