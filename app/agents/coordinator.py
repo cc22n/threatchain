@@ -1,8 +1,7 @@
 import asyncio
-import time
 import uuid
 import logging
-from typing import TypedDict, Annotated
+from typing import TypedDict
 from sqlalchemy.ext.asyncio import AsyncSession
 from langgraph.graph import StateGraph, END
 
@@ -13,7 +12,6 @@ from app.agents.osint_agent import OsintAgent
 from app.agents.mitre_agent import MitreAgent
 from app.agents.report_agent import ReportAgent
 from app.chains.correlation_chain import correlate_findings
-from app.models.investigation import Investigation
 from app.services import progress
 
 logger = logging.getLogger(__name__)

@@ -1,4 +1,3 @@
-import pytest
 from app.chains.severity_scorer import calculate_severity_score, determine_verdict
 
 

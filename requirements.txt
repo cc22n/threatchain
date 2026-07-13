@@ -20,7 +20,10 @@ alembic==1.14.0
 
 # Vector Store / RAG
 chromadb==0.5.23
-openai==1.57.4
+# langchain-openai 0.2.14 requires openai>=1.58.1,<2; a hard 1.x pin here
+# conflicted and broke fresh installs (CI). Local dev may run a newer 2.x
+# already installed, but resolvable ranges keep CI/Docker reproducible.
+openai>=1.58.1,<2.0.0
 
 # Cache / Task Queue
 redis==5.2.1

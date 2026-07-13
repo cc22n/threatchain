@@ -1,4 +1,3 @@
-import pytest
 from app.chains.correlation_chain import correlate_findings
 
 

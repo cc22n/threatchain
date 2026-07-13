@@ -7,12 +7,6 @@ from app.agents.recon_agent import ReconAgent
 @pytest.mark.asyncio
 async def test_recon_agent_success(db_session, mock_redis):
     investigation_id = uuid.uuid4()
-    mock_findings = {
-        "reputation": "malicious",
-        "risk_score": 9.2,
-        "key_indicators": ["tor_exit_node", "cobalt_strike_c2"],
-        "summary": "Highly malicious Tor exit node associated with Cobalt Strike C2.",
-    }
 
     mock_llm = MagicMock()
     mock_llm.model_name = "mock-model"
