@@ -12,6 +12,9 @@ langchain-google-genai==2.0.7
 langchain-groq==0.2.4
 langchain-anthropic==0.3.0
 langgraph==0.2.60
+# Range, not a hard pin: must stay resolvable against the langchain 0.3.x
+# pins above (a 1.x hard pin would conflict on langchain-core in CI).
+langchain-chroma>=0.1.4,<2
 
 # Database
 sqlalchemy==2.0.36
