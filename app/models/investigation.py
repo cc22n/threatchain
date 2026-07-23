@@ -1,10 +1,14 @@
 import uuid
-from datetime import datetime
-from sqlalchemy import String, Text, Integer, Numeric, TIMESTAMP, func
+from datetime import datetime, timezone
+from sqlalchemy import String, Text, Integer, Numeric, TIMESTAMP
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
 from app.models.types import JSONBType
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class Investigation(Base):
@@ -22,5 +26,5 @@ class Investigation(Base):
     total_api_calls: Mapped[int] = mapped_column(Integer, default=0)
     total_tokens_used: Mapped[int] = mapped_column(Integer, default=0)
     execution_time_seconds: Mapped[float | None] = mapped_column(Numeric(8, 2), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(TIMESTAMP, server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(TIMESTAMP, default=_utc_now)
     completed_at: Mapped[datetime | None] = mapped_column(TIMESTAMP, nullable=True)

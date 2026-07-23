@@ -9,15 +9,48 @@ import asyncio
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
+import logging
+from contextlib import asynccontextmanager
+
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
+from app.database import AsyncSessionLocal
+from app.services.rate_limiter import RateLimiter
 from app.api.investigations import router as investigations_router
 from app.api.health import router as health_router
 from app.api.reports import router as reports_router
 from app.api.ws import router as ws_router
 
-app = FastAPI(title="ThreatChain", version="0.2.0")
+logger = logging.getLogger(__name__)
+
+scheduler = AsyncIOScheduler()
+
+
+async def _reset_rate_limits() -> None:
+    async with AsyncSessionLocal() as db:
+        limiter = RateLimiter(db)
+        n = await limiter.reset_daily_counters()
+    logger.info("Daily rate limit reset: %d api_configs rows reset", n)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    scheduler.add_job(
+        _reset_rate_limits,
+        trigger=CronTrigger(hour=0, minute=0, timezone="UTC"),
+        id="reset_rate_limits",
+        replace_existing=True,
+        misfire_grace_time=3600,
+    )
+    scheduler.start()
+    yield
+    scheduler.shutdown(wait=False)
+
+
+app = FastAPI(title="ThreatChain", version="0.2.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

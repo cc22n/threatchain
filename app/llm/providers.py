@@ -43,4 +43,12 @@ def get_llm(provider: str, model: str) -> BaseChatModel:
         from langchain_groq import ChatGroq
         return ChatGroq(model=model, api_key=api_key)
 
+    if provider == "deepseek":
+        from langchain_openai import ChatOpenAI
+        return ChatOpenAI(
+            model=model,
+            api_key=api_key,
+            base_url=provider_cfg.get("base_url", "https://api.deepseek.com"),
+        )
+
     raise ValueError(f"Unknown provider: {provider}")

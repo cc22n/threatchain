@@ -57,6 +57,10 @@ aiosqlite==0.22.1
 python-dotenv==1.0.1
 slowapi==0.1.9
 websockets==14.1
+apscheduler==3.10.4
 
 # UI
 streamlit==1.56.0
+
+# Telegram bot
+python-telegram-bot==21.9

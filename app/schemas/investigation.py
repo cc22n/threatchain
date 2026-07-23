@@ -9,10 +9,12 @@ _VALID_IOC_TYPES = {"ip", "domain", "hash", "url", "email", "cve"}
 class InvestigationCreate(BaseModel):
     ioc_value: str
     ioc_type: Optional[str] = None
-    # wait=False returns immediately with status "pending" and runs the
-    # investigation in the background; track progress via the WebSocket
-    # /ws/investigation/{id} or by polling GET /investigations/{id}.
-    wait: bool = True
+    # wait=False (default) returns immediately with status "pending" and runs
+    # the investigation in the background; track progress via the WebSocket
+    # /ws/investigation/{id} or by polling GET /investigations/{id}. wait=True
+    # blocks for the full 30-120s pipeline - only use it for direct scripting
+    # against a backend with no proxy timeout in front of it.
+    wait: bool = False
 
     @field_validator("ioc_value")
     @classmethod

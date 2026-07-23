@@ -74,10 +74,16 @@ async def start_batch(ioc_list: list[str], background_tasks: BackgroundTasks):
 
 
 @router.get("/investigations", response_model=list[InvestigationResponse])
-async def list_investigations(skip: int = 0, limit: int = 20, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(Investigation).order_by(Investigation.created_at.desc()).offset(skip).limit(limit)
-    )
+async def list_investigations(
+    skip: int = 0,
+    limit: int = 20,
+    ioc_value: str | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    query = select(Investigation).order_by(Investigation.created_at.desc())
+    if ioc_value:
+        query = query.where(Investigation.ioc_value == ioc_value)
+    result = await db.execute(query.offset(skip).limit(limit))
     return result.scalars().all()
 
 

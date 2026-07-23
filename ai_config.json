@@ -34,15 +34,23 @@
       "models": {
         "llama-3.3-70b-versatile": {"tier": "free", "cost_input_per_m": 0.00, "cost_output_per_m": 0.00}
       }
+    },
+    "deepseek": {
+      "api_key_env": "DEEPSEEK_API_KEY",
+      "base_url": "https://api.deepseek.com",
+      "models": {
+        "deepseek-chat":     {"tier": "cheap",   "cost_input_per_m": 0.27, "cost_output_per_m": 1.10},
+        "deepseek-reasoner": {"tier": "premium", "cost_input_per_m": 0.55, "cost_output_per_m": 2.19}
+      }
     }
   },
   "agent_routing": {
-    "coordinator": {"primary": "xai/grok-4.20-multi-agent-0309", "fallback": "openai/gpt-4o"},
-    "recon":       {"primary": "xai/grok-4-1-fast-non-reasoning", "fallback": "openai/gpt-4o-mini"},
-    "malware":     {"primary": "xai/grok-4-1-fast-non-reasoning", "fallback": "openai/gpt-4o-mini"},
-    "vuln":        {"primary": "xai/grok-4-1-fast-non-reasoning", "fallback": "openai/gpt-4o-mini"},
-    "mitre":       {"primary": "xai/grok-4-1-fast-non-reasoning", "fallback": "openai/gpt-4o-mini"},
-    "osint":       {"primary": "xai/grok-4-1-fast-non-reasoning", "fallback": "openai/gpt-4o-mini"},
+    "coordinator": {"primary": "deepseek/deepseek-reasoner", "fallback": "openai/gpt-4o"},
+    "recon":       {"primary": "deepseek/deepseek-chat", "fallback": "openai/gpt-4o-mini"},
+    "malware":     {"primary": "deepseek/deepseek-chat", "fallback": "openai/gpt-4o-mini"},
+    "vuln":        {"primary": "deepseek/deepseek-chat", "fallback": "openai/gpt-4o-mini"},
+    "mitre":       {"primary": "deepseek/deepseek-chat", "fallback": "openai/gpt-4o-mini"},
+    "osint":       {"primary": "deepseek/deepseek-chat", "fallback": "openai/gpt-4o-mini"},
     "report":      {"primary": "anthropic/claude-sonnet-4-6", "fallback": "openai/gpt-4o"}
   }
 }

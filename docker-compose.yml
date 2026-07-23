@@ -1,8 +1,7 @@
-version: "3.9"
-
 services:
   db:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: threatchain_user
       POSTGRES_PASSWORD: threatchain_pass
@@ -19,6 +18,7 @@ services:
 
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     ports:
       - "6379:6379"
     volumes:
@@ -31,6 +31,7 @@ services:
 
   api:
     build: .
+    restart: unless-stopped
     ports:
       - "8000:8000"
     env_file: .env
@@ -55,10 +56,25 @@ services:
 
   ui:
     build: .
+    restart: unless-stopped
     working_dir: /app
     command: streamlit run ui/app.py --server.port 8501 --server.address 0.0.0.0
     ports:
       - "8501:8501"
+    env_file: .env
+    environment:
+      PYTHONPATH: /app
+      THREATCHAIN_API_BASE: http://api:8000/api/v1
+      THREATCHAIN_WS_BASE: ws://api:8000/ws
+    depends_on:
+      api:
+        condition: service_healthy
+
+  bot:
+    build: .
+    restart: unless-stopped
+    working_dir: /app
+    command: python -m app.bot.telegram_bot
     env_file: .env
     environment:
       PYTHONPATH: /app

@@ -9,15 +9,15 @@ Submit an IOC (IP, domain, hash, URL, or CVE) and ThreatChain orchestrates 7 spe
 ## Architecture
 
 ```
-User submits IOC
+User submits IOC (chat, HTTP, or Telegram)
       |
       v
- COORDINATOR (GPT-4o / LangGraph)
+ COORDINATOR (DeepSeek Reasoner / LangGraph)
       |
   asyncio.gather
  /    |    |    |    \
 RECON MALWARE VULN OSINT MITRE
-(Grok)(Grok)(Gemini)(Gemini)(RAG)
+(DeepSeek Chat, all four)      (RAG)
       |
  Correlation Engine
       |
@@ -44,8 +44,9 @@ RECON MALWARE VULN OSINT MITRE
 | Vector Store | ChromaDB (local) |
 | Embeddings | OpenAI text-embedding-3-small |
 | Cache | Redis |
-| LLMs | GPT-4o, Claude Sonnet, Grok, Gemini, Groq |
+| LLMs | DeepSeek (primary), Claude Sonnet, GPT-4o (fallback), Gemini, Groq |
 | UI | Streamlit |
+| Bot | python-telegram-bot (private, allowlist-gated) |
 
 ---
 
@@ -68,6 +69,7 @@ docker compose up -d
 
 API available at `http://localhost:8000`
 UI available at `http://localhost:8501`
+Telegram bot starts automatically if `TELEGRAM_BOT_TOKEN` is set in `.env` (see [Telegram Bot](#telegram-bot) below) — it's a private, allowlist-only bot with no exposed port.
 
 ### 3. Index MITRE ATT&CK (one-time setup)
 
@@ -124,7 +126,7 @@ streamlit run ui/app.py              # UI on :8501
 |---|---|---|---|
 | POST | `/api/v1/investigate` | Required | Start investigation |
 | POST | `/api/v1/investigate/batch` | Required | Batch (up to 20 IOCs) |
-| GET | `/api/v1/investigations` | - | List investigations |
+| GET | `/api/v1/investigations` | - | List investigations (optional `?ioc_value=` filter) |
 | GET | `/api/v1/investigations/{id}` | - | Investigation detail |
 | GET | `/api/v1/investigations/{id}/results` | - | Per-agent results |
 | GET | `/api/v1/investigations/{id}/mitre` | - | MITRE mappings |
@@ -141,14 +143,17 @@ Full Swagger docs: `http://localhost:8000/docs`
 
 ### Async mode and real-time progress
 
-By default `POST /investigate` blocks until the investigation finishes.
-Pass `"wait": false` to get the investigation id immediately (status
-`pending`) and follow progress over the WebSocket:
+By default `POST /investigate` returns the investigation id immediately
+(status `pending`, `"wait": false` is the default) so a caller behind a
+proxy timeout never blocks for the full 15-120s pipeline. Pass
+`"wait": true` if you specifically want a synchronous call that returns
+the finished result directly — only safe for direct scripting against a
+backend with no request timeout in front of it.
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/investigate \
   -H "Content-Type: application/json" \
-  -d '{"ioc_value": "8.8.8.8", "wait": false}'
+  -d '{"ioc_value": "8.8.8.8"}'
 # -> {"id": "<uuid>", "status": "pending", ...}
 ```
 
@@ -185,6 +190,45 @@ live per-agent progress.
 
 ---
 
+## Telegram Bot
+
+A private Telegram bot (`app/bot/telegram_bot.py`) wraps the API so investigations can be run from a phone. It's a thin HTTP/WebSocket client — no direct database or agent access — built on `python-telegram-bot`, reusing the same `POST /investigate` + `WS /ws/investigation/{id}` flow as the Streamlit UI.
+
+**Commands:**
+
+| Command | Description |
+|---|---|
+| `/investigar <IOC>` | Start an investigation (or send the IOC with no command) |
+| `/estado <id>` | Check progress/result on demand |
+| `/reporte <id>` | Full markdown report, sent in-chat |
+| `/metricas` | Global stats (`GET /api/v1/stats`) |
+| `/ayuda` | Usage examples |
+
+**Live progress:** the initial message is edited in place as each agent finishes (`[OK] recon`, `[OK] osint`, ...), then replaced with the final verdict — no chat spam.
+
+**Why private (allowlist), not public:**
+- Every investigation burns LLM tokens and calls against the 17 external APIs' shared daily quotas — an open bot is an open invitation to drain both.
+- For a portfolio piece, a controlled demo (GIF/video, or a recruiter's `chat_id` added temporarily) is safer and just as effective as a public link, without the abuse surface.
+- `TELEGRAM_ALLOWLIST` is a plain comma-separated list of Telegram `chat_id`s in `.env`; an empty list means the bot accepts nobody. Get your own `chat_id` from `@userinfobot`.
+
+**Per-user protections**, independent of the per-API rate limiter in `app/services/rate_limiter.py`:
+- Daily cap per Telegram user (`TELEGRAM_RATE_LIMIT_PER_DAY`, default 20), in-memory in the bot process.
+- Duplicate-investigation dedup: re-asking about the same IOC within 10 minutes reuses the in-flight or just-finished investigation instead of re-running the full 7-agent pipeline.
+
+**Run it:**
+
+```bash
+# Local
+python -m app.bot.telegram_bot
+
+# Docker Compose (starts automatically alongside api/ui if TELEGRAM_BOT_TOKEN is set)
+docker compose up -d bot
+```
+
+> Demo GIF: not embedded here yet — the bot is private by design, so a screen recording (rather than a public link) is the "try it yourself" for reviewers. Add it under `docs/telegram-demo.gif` and link it here once recorded.
+
+---
+
 ## Running Tests
 
 ```bash
@@ -202,6 +246,7 @@ DATABASE_URL=postgresql+psycopg://...
 REDIS_URL=redis://localhost:6379/0
 OPENAI_API_KEY=
 ANTHROPIC_API_KEY=
+DEEPSEEK_API_KEY=
 XAI_API_KEY=
 GEMINI_API_KEY=
 GROQ_API_KEY=
@@ -209,6 +254,13 @@ VIRUSTOTAL_API_KEY=
 ABUSEIPDB_API_KEY=
 SHODAN_API_KEY=
 API_KEY=                    # Optional: enables X-API-Key auth on mutations
+
+# Telegram bot (optional - private, allowlist-only)
+TELEGRAM_BOT_TOKEN=         # From @BotFather
+TELEGRAM_ALLOWLIST=         # Comma-separated chat_ids; empty = bot accepts nobody
+TELEGRAM_RATE_LIMIT_PER_DAY=20
+THREATCHAIN_API_BASE=http://localhost:8000/api/v1
+THREATCHAIN_WS_BASE=ws://localhost:8000/ws
 ```
 
 ---
@@ -242,37 +294,22 @@ alembic/        # Database migrations
 - Redis cache with 24h TTL reduces external API exposure
 - Soft-delete preserves investigation audit trail
 - No API keys in source code; all secrets via environment variables
+
 ---
-# 1. Crea el entorno conda
-  conda create -n ThreatChain python=3.11
-  conda activate ThreatChain
 
-  # 2. Instala dependencias
-  pip install -r requirements.txt
+## Architecture Decisions
 
-  # 3. Crea el archivo .env
-  copy .env.example .env
-  # Edita .env con tus keys y la URL de tu Postgres local:
-  # DATABASE_URL=postgresql+psycopg://tu_usuario:tu_password@localhost:5432/threatchain
+Short answers to the "why didn't you..." questions a reviewer might ask:
 
-  # 4. Crea la base de datos en PostgreSQL
-  # (en psql o pgAdmin)
-  # CREATE DATABASE threatchain;
-  # CREATE USER threatchain_user WITH PASSWORD 'threatchain_pass';
-  # GRANT ALL PRIVILEGES ON DATABASE threatchain TO threatchain_user;
+**Why no Celery, if it's in `requirements.txt`?**
+It's a leftover from early planning — no worker, no task module, nothing imports it. Non-blocking investigations are already solved with FastAPI `BackgroundTasks` (`POST /investigate` with `"wait": false` returns immediately) plus the `WS /ws/investigation/{id}` progress stream. A task queue only earns its complexity if the bot/API need to scale across multiple processes or machines; at the current single-instance scale it would be pure overhead. Revisit if that changes.
 
-  # 5. Aplica todas las migraciones (crea todas las tablas + indexes)
-  alembic upgrade head
+**Why is the Telegram bot private instead of public?**
+See [Telegram Bot](#telegram-bot) above — public access on a bot that triggers real LLM calls and hits shared third-party API quotas is an abuse vector with no upside for a portfolio piece.
 
-  # 6. Indexa MITRE ATT&CK (UNA SOLA VEZ)
-  # Descarga enterprise-attack.json y guardalo en knowledge_base/mitre/
-  python -c "from app.rag.loaders.mitre_loader import load_mitre_index; load_mitre_index()"
+**Where does this actually run — VPS, PaaS, or just local?**
+Not deployed permanently yet, by choice: the repo is deployment-ready (`docker compose up -d` brings up `db`, `redis`, `api`, `ui`, and `bot` with `restart: unless-stopped` on all five), but provisioning a real host (Hetzner VPS, Railway/Render/Fly.io, or a temporary tunnel for a live demo) is a cost/hosting decision left for whenever it's actually needed, rather than paying for infrastructure that would otherwise sit idle.
 
-  # 7. Levanta la API (terminal 1)
-  uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-
-  # 8. Levanta la UI (terminal 2)
-  streamlit run ui/app.py
 ---
 
 ## Portfolio Context

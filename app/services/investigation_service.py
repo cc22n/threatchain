@@ -60,11 +60,13 @@ async def run_investigation(
         coordinator = Coordinator(db=db, redis_client=redis_client)
         result = await coordinator.investigate(ioc_value, resolved_type, investigation.id)
         correlation = result.get("correlation", {})
+        report_findings = result.get("report", {})
 
         investigation.status = "completed"
         investigation.verdict = correlation.get("verdict", "unknown")
         investigation.severity = correlation.get("severity", "info")
         investigation.severity_score = correlation.get("severity_score")
+        investigation.summary = report_findings.get("executive_summary")
         investigation.agents_used = correlation.get("agents_completed", [])
         investigation.execution_time_seconds = round(time.monotonic() - start, 2)
 

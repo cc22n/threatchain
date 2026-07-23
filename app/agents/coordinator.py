@@ -127,10 +127,11 @@ class Coordinator:
         }
         final_state = await self.graph.ainvoke(initial_state)
 
+        report_findings: dict = {}
         if generate_report:
             try:
                 report_agent = ReportAgent(db=self.db)
-                await report_agent.run(ioc_value, ioc_type, investigation_id)
+                report_findings = await report_agent.run(ioc_value, ioc_type, investigation_id)
                 progress.publish(str(investigation_id), {
                     "event": "report_generated",
                     "investigation_id": str(investigation_id),
@@ -141,4 +142,5 @@ class Coordinator:
         return {
             "agent_findings": final_state["agent_findings"],
             "correlation": final_state["correlation"],
+            "report": report_findings,
         }

@@ -28,6 +28,14 @@ class Settings(BaseSettings):
     # Optional: set to require X-API-Key header on mutation endpoints.
     # Leave empty to disable auth (local/dev mode).
     API_KEY: str = ""
+    # Telegram bot: token from BotFather, and a closed allowlist of chat_ids
+    # (comma-separated). The bot is private by design - an empty allowlist
+    # means nobody can use it. Kept as a plain str (not List[int]): pydantic
+    # -settings JSON-decodes complex-typed env fields before any validator
+    # runs, so an empty or plain comma-separated value raises SettingsError
+    # instead of reaching a "before" validator. See telegram_allowlist_ids.
+    TELEGRAM_BOT_TOKEN: str = ""
+    TELEGRAM_ALLOWLIST: str = ""
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
@@ -35,6 +43,10 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             return [o.strip() for o in v.split(",")]
         return v
+
+    @property
+    def telegram_allowlist_ids(self) -> List[int]:
+        return [int(x.strip()) for x in self.TELEGRAM_ALLOWLIST.split(",") if x.strip()]
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 

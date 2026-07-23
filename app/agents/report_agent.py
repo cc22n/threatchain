@@ -60,12 +60,12 @@ class ReportAgent(BaseAgent):
         except Exception as e:
             logger.error("Report generation failed: %s", e)
             report_data = {
-                "executive_summary": f"Investigation of {ioc_value} completed with {len(agent_findings)} agents.",
+                "executive_summary": f"Investigacion de {ioc_value} completada con {len(agent_findings)} agentes.",
                 "verdict": correlation.get("verdict", "unknown"),
                 "severity": correlation.get("severity", "info"),
                 "severity_score": correlation.get("severity_score", 0.0),
                 "key_findings": [],
-                "recommendations": "Review raw agent findings for details.",
+                "recommendations": "Revisar los hallazgos crudos de cada agente para mas detalle.",
                 "timeline": [],
                 "_tokens_used": 0,
                 "_model": "",
