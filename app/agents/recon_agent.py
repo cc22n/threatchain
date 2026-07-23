@@ -12,7 +12,7 @@ from app.tools.urlscan import URLScanTool
 from app.tools.securitytrails import SecurityTrailsTool
 from app.tools.threatfox import ThreatFoxTool
 from app.llm.router import get_llm_for_agent
-from app.utils import parse_llm_json
+from app.utils import parse_llm_json, sanitize_for_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +70,7 @@ class ReconAgent(BaseAgent):
                 logger.warning("Tool %s failed: %s", tool_name, e)
                 errors[tool_name] = str(e)
 
-        prompt = f"IOC: {ioc_value} (type: {ioc_type})\n\nThreat Intelligence Data:\n{raw_results}"
+        prompt = f"IOC: {sanitize_for_prompt(ioc_value)} (type: {ioc_type})\n\nThreat Intelligence Data:\n{raw_results}"
         messages = [SystemMessage(content=SYSTEM_PROMPT), HumanMessage(content=prompt)]
 
         llm_model = ""

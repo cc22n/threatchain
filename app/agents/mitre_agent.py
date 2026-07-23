@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.agents.base_agent import BaseAgent
 from app.chains.mitre_lookup_chain import mitre_lookup
 from app.models.mitre_mapping import MitreMapping
+from app.utils import sanitize_for_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +19,7 @@ class MitreAgent(BaseAgent):
 
     async def run(self, ioc_value: str, ioc_type: str, investigation_id: uuid.UUID, context_findings: dict | None = None) -> dict:
         start = time.monotonic()
-        query = f"{ioc_type} IOC: {ioc_value}"
+        query = f"{ioc_type} IOC: {sanitize_for_prompt(ioc_value)}"
         if context_findings:
             summary = str(context_findings.get("summary", ""))[:500]
             indicators = [str(i)[:100] for i in context_findings.get("key_indicators", [])[:10]]

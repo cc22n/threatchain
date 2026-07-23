@@ -9,7 +9,7 @@ from app.tools.nvd import NVDTool
 from app.tools.cisa_kev import CISAKEVTool
 from app.tools.exploitdb import ExploitDBTool
 from app.llm.router import get_llm_for_agent
-from app.utils import parse_llm_json
+from app.utils import parse_llm_json, sanitize_for_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +50,7 @@ class VulnAgent(BaseAgent):
                 logger.warning("Tool %s failed: %s", tool_name, e)
                 errors[tool_name] = str(e)
 
-        prompt = f"CVE: {ioc_value}\n\nVulnerability Data:\n{raw_results}"
+        prompt = f"CVE: {sanitize_for_prompt(ioc_value)}\n\nVulnerability Data:\n{raw_results}"
         messages = [SystemMessage(content=SYSTEM_PROMPT), HumanMessage(content=prompt)]
         findings = {}
         tokens_used = 0

@@ -4,7 +4,7 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.language_models import BaseChatModel
-from app.utils import parse_llm_json
+from app.utils import parse_llm_json, sanitize_for_prompt
 
 TEMPLATES_DIR = Path(__file__).parent.parent.parent / "templates"
 
@@ -56,7 +56,7 @@ async def generate_report_content(
     mitre_text = json.dumps(mitre_techniques, indent=2)
 
     user_content = (
-        f"IOC: {ioc_value} (type: {ioc_type})\n\n"
+        f"IOC: {sanitize_for_prompt(ioc_value)} (type: {ioc_type})\n\n"
         f"Correlation Summary:\n{json.dumps(correlation, indent=2)}\n\n"
         f"Agent Findings:\n{findings_text}\n\n"
         f"MITRE ATT&CK Techniques:\n{mitre_text}"
