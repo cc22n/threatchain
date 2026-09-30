@@ -62,6 +62,9 @@ logs/
 API_AUDIT_PLAN.md
 PROGRESS.md
 
+# AgentGate planning/supervision documents (brief, plans, progress, walkthrough)
+AgentGate_*.md
+
 # AgentGate runtime leftovers: the dashboard manifest editor writes through a
 # temp file (tmpXXXX) in agentgate/manifests/ before an atomic os.replace().
 agentgate/manifests/tmp*

@@ -254,7 +254,7 @@ python scripts/agentgate_demo.py
 
 It walks through ALLOW, DENY, MASK, a paused-and-resumed approval, rate-limit escalation and the resulting audit trail.
 
-**Known limitations** (full list and verification status in [`AgentGate_Execution_Walkthrough.md`](AgentGate_Execution_Walkthrough.md)):
+**Known limitations and verification status:**
 - Verified with mocks, in-memory SQLite, a fake Redis and offline migration SQL — **not yet against a real Telegram bot, Redis or PostgreSQL** (the audit-immutability trigger has not been run on a real PostgreSQL).
 - The PDP is an in-process library, not a separate service; manifests are files and approval requests live in memory/Redis (only the audit log is in PostgreSQL).
 - Restarting the API drops calls that were waiting for approval; the per-minute counters are per process.
