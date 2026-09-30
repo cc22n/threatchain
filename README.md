@@ -4,6 +4,8 @@
 
 Submit an IOC (IP, domain, hash, URL, or CVE) and ThreatChain orchestrates 7 specialized AI agents that query 17+ threat intelligence APIs, correlate findings with MITRE ATT&CK via RAG, and generate a professional investigation report with verdict and recommendations — in 15-30 seconds.
 
+Every tool call the agents make is governed by **[AgentGate](#agentgate-permissions-and-human-approval)**, a deterministic permission layer (no LLM in the decision path) with per-agent manifests, human-in-the-loop approval over Telegram, and an append-only audit log.
+
 ---
 
 ## Architecture
@@ -24,6 +26,10 @@ RECON MALWARE VULN OSINT MITRE
  REPORT AGENT (Claude Sonnet)
       |
  Markdown / PDF / STIX 2.1
+
+Agent -> ThreatIntelTool -> AgentGate PEP -> PDP (ALLOW / DENY / MASK / REQUIRE_APPROVAL) -> external API
+                                   |
+                                   +-> audit log (PostgreSQL) + Telegram approval when needed
 ```
 
 **IOC routing:**
@@ -44,6 +50,7 @@ RECON MALWARE VULN OSINT MITRE
 | Vector Store | ChromaDB (local) |
 | Embeddings | OpenAI text-embedding-3-small |
 | Cache | Redis |
+| Agent permissions | AgentGate (deterministic PEP/PDP, JSON/YAML manifests, HTMX dashboard) |
 | LLMs | DeepSeek (primary), Claude Sonnet, GPT-4o (fallback), Gemini, Groq |
 | UI | Streamlit |
 | Bot | python-telegram-bot (private, allowlist-gated) |
@@ -190,6 +197,72 @@ live per-agent progress.
 
 ---
 
+## AgentGate: permissions and human approval
+
+OAuth-style scopes answer "may this agent use this *kind* of tool?" once, at grant time. They do not answer "should *this call*, with *these arguments*, run *right now*?". AgentGate (`agentgate/`) makes that second decision on every tool call, using deterministic rules instead of asking an LLM, so each decision is reproducible and auditable.
+
+```
+ThreatIntelTool._arun -> PEP.authorize -> PDP.decide (agent manifest + per-minute limit)
+   ALLOW             run the tool
+   DENY              PermissionDeniedError (audited)
+   MASK              internal (RFC 1918) IOC: the tool is skipped, nothing is sent to a third-party API
+   REQUIRE_APPROVAL  pause -> Telegram buttons -> human approves/rejects -> revalidate context -> run once
+```
+
+**Manifests** live in `agentgate/manifests/<agent>.json` (YAML also works). Editing one changes permissions without touching agent code; an agent with no manifest is denied (fail-closed), and two files for the same agent are rejected at load time.
+
+```json
+{
+  "agent": "recon_agent",
+  "tools_allowed": [{"name": "shodan", "scope": "read_only", "rate_limit_per_min": 10}],
+  "tools_denied": ["isolate_host", "wipe_disk"],
+  "requires_approval": ["block_ip"],
+  "mask_rules": [{"tool": "*", "fields": ["ioc_value", "ip", "target"], "condition": "rfc1918_ip"}]
+}
+```
+
+**Rate-based escalation:** the first N calls per minute to a tool are auto-approved; call N+1 becomes a `REQUIRE_APPROVAL`. Today this is the only path that puts a *real* ThreatChain tool in front of a human, since the names in `requires_approval` (`block_ip`, ...) are not actual tools yet.
+
+**Human-in-the-loop:** the API process pauses the call and sends the request straight to the Telegram allowlist with Approve/Reject buttons; the bot process relays the tap to the API. The wait is `AGENTGATE_APPROVAL_WAIT_SECONDS` (90 s), and the expiry shown to the human matches it. On approval the context (token, api key, session, target hash) is revalidated before the tool runs exactly once; rejection, expiry or a changed context raise `ApprovalRejectedError`, `ApprovalExpiredError` or `ContextChangedError`, and the agent continues with its other tools.
+
+**Audit log:** every decision is recorded in `agentgate_audit_logs` (rows are only ever inserted; a PostgreSQL trigger blocks `UPDATE`/`DELETE`; private IPs are redacted before storing). An approval cycle leaves linked rows: `DECISION` -> `APPROVAL_RESOLVED` -> `EXECUTION`.
+
+**Dashboard:** `http://localhost:8000/agentgate/` — decision feed with filters, pending approvals, manifest editor with hot reload, and metrics (calls per agent, top tools, average human response time). The page shell is public; every data/action endpoint requires the same `X-API-Key` as the mutation endpoints above (enter it in the page header).
+
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/agentgate/api/metrics` | Counters, top tools, average human response time |
+| GET | `/agentgate/api/decisions?agent=&decision=&tool=&limit=` | Filtered decision feed |
+| GET | `/agentgate/api/pending` | Pending approvals |
+| POST | `/agentgate/api/approve/{id}?approver=` | Approve (409 if already resolved) |
+| POST | `/agentgate/api/reject/{id}?approver=` | Reject (409 if already resolved) |
+| GET / PUT | `/agentgate/api/manifests/{agent}` | Read / validate + atomically update a manifest |
+
+**Configuration** (`.env`):
+
+| Variable | Default | Effect |
+|---|---|---|
+| `AGENTGATE_APPROVAL_WAIT_SECONDS` | 90 | How long a paused call waits. Keep it below `INVESTIGATION_TIMEOUT_SECONDS`; a warning is logged otherwise. |
+| `AGENTGATE_TELEGRAM_NOTIFY` | true | Send approval requests to `TELEGRAM_ALLOWLIST`. If the token/allowlist is empty it is skipped and approvals still work from the dashboard. |
+| `AGENTGATE_STRICT` | false | A tool call without an agent identity is denied and audited (always on when `APP_ENV=production`); otherwise it only warns and audits as `agent=unknown`. |
+
+**Try it (no network, no API keys):**
+
+```bash
+python scripts/agentgate_demo.py
+```
+
+It walks through ALLOW, DENY, MASK, a paused-and-resumed approval, rate-limit escalation and the resulting audit trail.
+
+**Known limitations** (full list and verification status in [`AgentGate_Execution_Walkthrough.md`](AgentGate_Execution_Walkthrough.md)):
+- Verified with mocks, in-memory SQLite, a fake Redis and offline migration SQL — **not yet against a real Telegram bot, Redis or PostgreSQL** (the audit-immutability trigger has not been run on a real PostgreSQL).
+- The PDP is an in-process library, not a separate service; manifests are files and approval requests live in memory/Redis (only the audit log is in PostgreSQL).
+- Restarting the API drops calls that were waiting for approval; the per-minute counters are per process.
+- The dashboard reads the in-memory buffer (last 1000 decisions), not the audit table.
+- `approver` is declared by the caller (the shared API key is the only credential).
+
+---
+
 ## Telegram Bot
 
 A private Telegram bot (`app/bot/telegram_bot.py`) wraps the API so investigations can be run from a phone. It's a thin HTTP/WebSocket client — no direct database or agent access — built on `python-telegram-bot`, reusing the same `POST /investigate` + `WS /ws/investigation/{id}` flow as the Streamlit UI.
@@ -202,7 +275,10 @@ A private Telegram bot (`app/bot/telegram_bot.py`) wraps the API so investigatio
 | `/estado <id>` | Check progress/result on demand |
 | `/reporte <id>` | Full markdown report, sent in-chat |
 | `/metricas` | Global stats (`GET /api/v1/stats`) |
+| `/pendientes` | AgentGate approval requests waiting for a human |
 | `/ayuda` | Usage examples |
+
+**AgentGate approvals:** when a tool call needs a human, the bot's chat receives a message with **Approve / Reject** buttons (allowlisted chats only). The tap is relayed to the API as `telegram:<chat_id>`, and the message is edited to show who resolved it and when.
 
 **Live progress:** the initial message is edited in place as each agent finishes (`[OK] recon`, `[OK] osint`, ...), then replaced with the final verdict — no chat spam.
 
@@ -232,7 +308,10 @@ docker compose up -d bot
 ## Running Tests
 
 ```bash
-pytest tests/ -v
+pytest tests/ -v                       # full suite (235 tests, no real APIs, Telegram, Redis or PostgreSQL)
+pytest tests/test_agentgate -v         # AgentGate only
+python scripts/agentgate_demo.py       # executable AgentGate walkthrough
+python scripts/check_apis.py           # live check of the 17 APIs (needs real keys; runs through AgentGate)
 ```
 
 ---
@@ -261,6 +340,11 @@ TELEGRAM_ALLOWLIST=         # Comma-separated chat_ids; empty = bot accepts nobo
 TELEGRAM_RATE_LIMIT_PER_DAY=20
 THREATCHAIN_API_BASE=http://localhost:8000/api/v1
 THREATCHAIN_WS_BASE=ws://localhost:8000/ws
+
+# AgentGate (see the AgentGate section)
+AGENTGATE_APPROVAL_WAIT_SECONDS=90   # keep below INVESTIGATION_TIMEOUT_SECONDS
+AGENTGATE_TELEGRAM_NOTIFY=true
+AGENTGATE_STRICT=false               # forced on when APP_ENV=production
 ```
 
 ---
@@ -278,7 +362,10 @@ app/
   api/          # FastAPI routers + auth dependency
   models/       # SQLAlchemy models (indexed FKs)
   utils.py      # Shared helpers (LLM JSON parser)
-ui/             # Streamlit frontend
+agentgate/      # Permission layer: core (PDP/evaluator), client (PEP), hitl (queue, Telegram, revalidator),
+                #   audit (append-only log), dashboard (HTMX), manifests/ (per-agent policy), examples/
+scripts/        # agentgate_demo.py, check_apis.py, seed_api_configs.py
+ui/             # Streamlit frontend (includes an AgentGate governance page)
 tests/          # pytest test suite
 knowledge_base/ # MITRE ATT&CK STIX bundle + playbooks
 alembic/        # Database migrations
@@ -294,6 +381,9 @@ alembic/        # Database migrations
 - Redis cache with 24h TTL reduces external API exposure
 - Soft-delete preserves investigation audit trail
 - No API keys in source code; all secrets via environment variables
+- AgentGate governs every tool call: per-agent allow/deny lists, fail-closed for unknown agents and (in production) for calls without an agent identity, internal IPs never sent to third parties, human approval for risky actions
+- Append-only audit log of every decision and approval outcome, with private IPs redacted
+- Approvals can only be resolved from allowlisted Telegram chats or with the API key (with `API_KEY` empty in local dev, auth is off, as for the other endpoints); dashboard output is HTML-escaped and identifiers are validated with `fullmatch`
 
 ---
 
@@ -321,6 +411,7 @@ Built to demonstrate:
 - **Cybersecurity domain**: MITRE ATT&CK, STIX 2.1, 17 real threat intel APIs
 - **Clean architecture**: base classes, dependency injection, partial failure handling
 - **Security hardening**: API key auth, injection prevention, rate limiting, soft-delete
+- **Agent security**: PEP/PDP authorization at the *invocation* level, human-in-the-loop pause/resume, append-only auditing
 
 ---
 

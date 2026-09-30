@@ -2,6 +2,8 @@
 .env
 .env.local
 .env.*.local
+# The template with placeholders IS versioned
+!.env.example
 
 # Python
 __pycache__/
@@ -55,5 +57,21 @@ graphify-out
 # Logs
 *.log
 logs/
+
+# Local working notes (not part of the deliverable)
 API_AUDIT_PLAN.md
 PROGRESS.md
+
+# AgentGate runtime leftovers: the dashboard manifest editor writes through a
+# temp file (tmpXXXX) in agentgate/manifests/ before an atomic os.replace().
+agentgate/manifests/tmp*
+agentgate/manifests/*.tmp
+
+# Tooling caches
+.mypy_cache/
+.ruff_cache/
+
+# Scratch / backups
+*.tmp
+*.bak
+*.orig
