@@ -1,5 +1,5 @@
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Body, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -14,6 +14,7 @@ from app.services.cache_service import get_redis_client
 
 from app.chains.ioc_classifier import IocClassifier
 from app.api.auth import require_api_key
+from app.limiter import limiter
 
 router = APIRouter()
 _classifier = IocClassifier()
@@ -21,7 +22,9 @@ _classifier = IocClassifier()
 
 @router.post("/investigate", response_model=InvestigationResponse, status_code=201,
              dependencies=[Depends(require_api_key)])
+@limiter.limit("20/minute")
 async def start_investigation(
+    request: Request,
     payload: InvestigationCreate,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
@@ -59,24 +62,31 @@ async def start_investigation(
 
 @router.post("/investigate/batch", status_code=202,
              dependencies=[Depends(require_api_key)])
-async def start_batch(ioc_list: list[str], background_tasks: BackgroundTasks):
-    if not ioc_list:
+@limiter.limit("5/minute")
+async def start_batch(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    ioc_list: list[str] = Body(...),
+):
+    clean_iocs = [ioc.strip() for ioc in ioc_list if isinstance(ioc, str) and ioc.strip()]
+    if not clean_iocs:
         raise HTTPException(status_code=422, detail="IOC list must not be empty")
-    if len(ioc_list) > 20:
+    if len(clean_iocs) > 20:
         raise HTTPException(status_code=422, detail="Batch limit is 20 IOCs")
 
     async def _run():
         redis = get_redis_client()
-        await run_batch(ioc_list, redis)
+        await run_batch(clean_iocs, redis)
 
     background_tasks.add_task(_run)
-    return {"message": f"Batch of {len(ioc_list)} IOCs queued", "ioc_count": len(ioc_list)}
+    return {"message": f"Batch of {len(clean_iocs)} IOCs queued", "ioc_count": len(clean_iocs)}
 
 
-@router.get("/investigations", response_model=list[InvestigationResponse])
+@router.get("/investigations", response_model=list[InvestigationResponse],
+            dependencies=[Depends(require_api_key)])
 async def list_investigations(
-    skip: int = 0,
-    limit: int = 20,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=20, ge=1, le=100),
     ioc_value: str | None = None,
     db: AsyncSession = Depends(get_db),
 ):
@@ -87,13 +97,15 @@ async def list_investigations(
     return result.scalars().all()
 
 
-@router.get("/investigations/{investigation_id}", response_model=InvestigationResponse)
+@router.get("/investigations/{investigation_id}", response_model=InvestigationResponse,
+            dependencies=[Depends(require_api_key)])
 async def get_investigation(investigation_id: str, db: AsyncSession = Depends(get_db)):
     uid = _parse_uuid(investigation_id)
     return await _get_or_404(db, uid)
 
 
-@router.get("/investigations/{investigation_id}/results")
+@router.get("/investigations/{investigation_id}/results",
+            dependencies=[Depends(require_api_key)])
 async def get_agent_results(investigation_id: str, db: AsyncSession = Depends(get_db)):
     uid = _parse_uuid(investigation_id)
     await _get_or_404(db, uid)
@@ -113,7 +125,8 @@ async def get_agent_results(investigation_id: str, db: AsyncSession = Depends(ge
     ]
 
 
-@router.get("/investigations/{investigation_id}/mitre")
+@router.get("/investigations/{investigation_id}/mitre",
+            dependencies=[Depends(require_api_key)])
 async def get_mitre_mappings(investigation_id: str, db: AsyncSession = Depends(get_db)):
     uid = _parse_uuid(investigation_id)
     await _get_or_404(db, uid)
@@ -125,7 +138,8 @@ async def get_mitre_mappings(investigation_id: str, db: AsyncSession = Depends(g
     ]
 
 
-@router.get("/investigations/{investigation_id}/relationships")
+@router.get("/investigations/{investigation_id}/relationships",
+            dependencies=[Depends(require_api_key)])
 async def get_ioc_relationships(investigation_id: str, db: AsyncSession = Depends(get_db)):
     uid = _parse_uuid(investigation_id)
     await _get_or_404(db, uid)

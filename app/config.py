@@ -1,6 +1,8 @@
+import logging
+
 from dotenv import load_dotenv
 from pydantic_settings import BaseSettings
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from typing import List
 
 # pydantic-settings reads .env only for the fields declared on Settings;
@@ -36,6 +38,25 @@ class Settings(BaseSettings):
     # instead of reaching a "before" validator. See telegram_allowlist_ids.
     TELEGRAM_BOT_TOKEN: str = ""
     TELEGRAM_ALLOWLIST: str = ""
+
+    # AgentGate configuration
+    AGENTGATE_APPROVAL_WAIT_SECONDS: int = 90
+    AGENTGATE_TELEGRAM_NOTIFY: bool = True
+    AGENTGATE_STRICT: bool = False
+
+    @model_validator(mode="after")
+    def warn_if_approval_wait_exceeds_investigation_timeout(self):
+        # A paused tool call waiting for a human is cancelled by the investigation-level
+        # asyncio.wait_for, so the approval wait must be shorter than that timeout.
+        if self.AGENTGATE_APPROVAL_WAIT_SECONDS >= self.INVESTIGATION_TIMEOUT_SECONDS:
+            logging.getLogger(__name__).warning(
+                "AGENTGATE_APPROVAL_WAIT_SECONDS (%s) should be lower than "
+                "INVESTIGATION_TIMEOUT_SECONDS (%s): the investigation will be cancelled "
+                "before the approval can expire cleanly.",
+                self.AGENTGATE_APPROVAL_WAIT_SECONDS,
+                self.INVESTIGATION_TIMEOUT_SECONDS,
+            )
+        return self
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod

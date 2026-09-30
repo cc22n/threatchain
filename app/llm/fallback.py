@@ -18,9 +18,13 @@ class LLMWithFallback:
             return result
         except Exception as e:
             logger.warning("Primary LLM failed (%s), switching to fallback", e)
-            result = await self.fallback.ainvoke(messages, **kwargs)
-            self._active = self.fallback
-            return result
+            try:
+                result = await self.fallback.ainvoke(messages, **kwargs)
+                self._active = self.fallback
+                return result
+            except Exception as fb_err:
+                logger.error("Fallback LLM also failed: %s", fb_err)
+                raise fb_err
 
     def invoke(self, messages: list[BaseMessage], **kwargs):
         try:
@@ -29,15 +33,23 @@ class LLMWithFallback:
             return result
         except Exception as e:
             logger.warning("Primary LLM failed (%s), switching to fallback", e)
-            result = self.fallback.invoke(messages, **kwargs)
-            self._active = self.fallback
-            return result
+            try:
+                result = self.fallback.invoke(messages, **kwargs)
+                self._active = self.fallback
+                return result
+            except Exception as fb_err:
+                logger.error("Fallback LLM also failed: %s", fb_err)
+                raise fb_err
 
     @property
     def model_used(self) -> str:
         if self._active is None:
             return "none"
-        return getattr(self._active, "model_name", str(self._active))
+        return (
+            getattr(self._active, "model_name", None)
+            or getattr(self._active, "model", None)
+            or str(self._active)
+        )
 
     @property
     def model_name(self) -> str:

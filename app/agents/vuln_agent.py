@@ -38,17 +38,15 @@ class VulnAgent(BaseAgent):
         errors = {}
         api_calls = 0
 
-        for tool_name, tool in [
+        tools_to_run = [
             ("nvd", self.nvd),
             ("cisa_kev", self.cisa_kev),
             ("exploitdb", self.exploitdb),
-        ]:
-            try:
-                raw_results[tool_name] = await tool._arun(ioc_value)
-                api_calls += 1
-            except Exception as e:
-                logger.warning("Tool %s failed: %s", tool_name, e)
-                errors[tool_name] = str(e)
+        ]
+
+        raw_results, errors, api_calls = await self._run_tools_parallel(
+            ioc_value, tools_to_run, context={"investigation_id": str(investigation_id)}
+        )
 
         prompt = f"CVE: {sanitize_for_prompt(ioc_value)}\n\nVulnerability Data:\n{raw_results}"
         messages = [SystemMessage(content=SYSTEM_PROMPT), HumanMessage(content=prompt)]

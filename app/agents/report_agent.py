@@ -93,11 +93,15 @@ class ReportAgent(BaseAgent):
 
         elapsed_ms = int((time.monotonic() - start) * 1000)
         findings = {
-            "verdict": report_data.get("verdict"),
-            "severity": report_data.get("severity"),
-            "severity_score": report_data.get("severity_score"),
-            "executive_summary": report_data.get("executive_summary"),
-            "recommendations": report_data.get("recommendations"),
+            "verdict": report_data.get("verdict") or correlation.get("verdict", "unknown"),
+            "severity": report_data.get("severity") or correlation.get("severity", "info"),
+            "severity_score": (
+                report_data.get("severity_score")
+                if report_data.get("severity_score") is not None
+                else correlation.get("severity_score", 0.0)
+            ),
+            "executive_summary": report_data.get("executive_summary", ""),
+            "recommendations": report_data.get("recommendations", ""),
             "key_findings": report_data.get("key_findings", []),
         }
 

@@ -32,26 +32,58 @@ try:
                 st.error(f"Error: {regen.text}")
     elif report_resp.status_code == 200:
         report = report_resp.json()
-        st.markdown(report["content"])
+        st.markdown(report.get("content", ""), unsafe_allow_html=False)
 
         st.divider()
         st.subheader("Download")
+
+        @st.cache_data(ttl=300, show_spinner=False)
+        def _fetch_file(inv_id_val: str, fmt: str) -> bytes | None:
+            try:
+                resp = httpx.get(
+                    f"{API_BASE}/investigations/{inv_id_val}/report/download?format={fmt}",
+                    headers=get_headers(),
+                    timeout=30,
+                )
+                if resp.status_code == 200:
+                    return resp.content
+            except Exception:
+                pass
+            return None
+
         col1, col2, col3 = st.columns(3)
 
         with col1:
-            md_resp = httpx.get(f"{API_BASE}/investigations/{inv_id}/report/download?format=md", headers=get_headers(), timeout=15)
-            if md_resp.status_code == 200:
-                st.download_button("Download Markdown", md_resp.content, file_name=f"report_{inv_id[:8]}.md", mime="text/markdown")
+            st.download_button(
+                "Download Markdown",
+                data=report.get("content", ""),
+                file_name=f"report_{inv_id[:8]}.md",
+                mime="text/markdown",
+            )
 
         with col2:
-            pdf_resp = httpx.get(f"{API_BASE}/investigations/{inv_id}/report/download?format=pdf", headers=get_headers(), timeout=30)
-            if pdf_resp.status_code == 200:
-                st.download_button("Download PDF", pdf_resp.content, file_name=f"report_{inv_id[:8]}.pdf", mime="application/pdf")
+            pdf_bytes = _fetch_file(inv_id, "pdf")
+            if pdf_bytes:
+                st.download_button(
+                    "Download PDF",
+                    data=pdf_bytes,
+                    file_name=f"report_{inv_id[:8]}.pdf",
+                    mime="application/pdf",
+                )
+            else:
+                st.button("PDF Unavailable", disabled=True)
 
         with col3:
-            stix_resp = httpx.get(f"{API_BASE}/investigations/{inv_id}/report/download?format=stix", headers=get_headers(), timeout=15)
-            if stix_resp.status_code == 200:
-                st.download_button("Download STIX 2.1", stix_resp.content, file_name=f"report_{inv_id[:8]}.stix.json", mime="application/json")
+            stix_bytes = _fetch_file(inv_id, "stix")
+            if stix_bytes:
+                st.download_button(
+                    "Download STIX 2.1",
+                    data=stix_bytes,
+                    file_name=f"report_{inv_id[:8]}.stix.json",
+                    mime="application/json",
+                )
+            else:
+                st.button("STIX Unavailable", disabled=True)
     else:
         st.error(f"API error {report_resp.status_code}: {report_resp.text}")
 

@@ -10,16 +10,16 @@
     "anthropic": {
       "api_key_env": "ANTHROPIC_API_KEY",
       "models": {
-        "claude-sonnet-4-6": {"tier": "premium", "cost_input_per_m": 3.00, "cost_output_per_m": 15.00}
+        "claude-3-5-sonnet-20241022": {"tier": "premium", "cost_input_per_m": 3.00, "cost_output_per_m": 15.00},
+        "claude-3-5-haiku-20241022": {"tier": "cheap", "cost_input_per_m": 0.80, "cost_output_per_m": 4.00}
       }
     },
     "xai": {
       "api_key_env": "XAI_API_KEY",
       "base_url": "https://api.x.ai/v1",
       "models": {
-        "grok-4-1-fast-non-reasoning": {"tier": "cheap", "cost_input_per_m": 0.20, "cost_output_per_m": 0.50},
-        "grok-4-1-fast-reasoning":     {"tier": "premium", "cost_input_per_m": 0.20, "cost_output_per_m": 0.50},
-        "grok-4.20-multi-agent-0309":  {"tier": "premium", "cost_input_per_m": 2.00, "cost_output_per_m": 6.00}
+        "grok-2-1212": {"tier": "premium", "cost_input_per_m": 2.00, "cost_output_per_m": 10.00},
+        "grok-beta": {"tier": "premium", "cost_input_per_m": 5.00, "cost_output_per_m": 15.00}
       }
     },
     "google": {
@@ -51,6 +51,6 @@
     "vuln":        {"primary": "deepseek/deepseek-chat", "fallback": "openai/gpt-4o-mini"},
     "mitre":       {"primary": "deepseek/deepseek-chat", "fallback": "openai/gpt-4o-mini"},
     "osint":       {"primary": "deepseek/deepseek-chat", "fallback": "openai/gpt-4o-mini"},
-    "report":      {"primary": "anthropic/claude-sonnet-4-6", "fallback": "openai/gpt-4o"}
+    "report":      {"primary": "anthropic/claude-3-5-sonnet-20241022", "fallback": "openai/gpt-4o"}
   }
 }

@@ -9,7 +9,14 @@ from functools import wraps
 import httpx
 import websockets
 from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
+from telegram.ext import (
+    Application,
+    CallbackQueryHandler,
+    CommandHandler,
+    ContextTypes,
+    MessageHandler,
+    filters,
+)
 
 from app.chains.ioc_classifier import IocClassifier
 from app.config import settings
@@ -419,6 +426,86 @@ async def on_direct_message(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     await _handle_ioc(update, ioc_value)
 
 
+async def on_approval_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if not query:
+        return
+    chat_id = update.effective_chat.id if update.effective_chat else None
+    if chat_id is None or not is_allowed(chat_id):
+        logger.warning("Blocked callback query from chat_id=%s (not in allowlist)", chat_id)
+        await query.answer("No autorizado para resolver aprobaciones de AgentGate.", show_alert=True)
+        return
+
+    await query.answer()
+    data = query.data or ""
+    parts = data.split("_", 2)
+    if len(parts) < 3:
+        return
+    action, approval_id = parts[1], parts[2]
+    endpoint_action = "approve" if action == "appr" else "reject"
+
+    backend_root = API_BASE.rsplit("/api/", 1)[0]
+    url = f"{backend_root}/agentgate/api/{endpoint_action}/{approval_id}"
+    approver_tag = f"telegram:{chat_id}"
+    now_utc = datetime.now(timezone.utc).strftime("%H:%M UTC")
+
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        try:
+            resp = await client.post(
+                url,
+                params={"approver": approver_tag},
+                headers=_headers(),
+            )
+            base_text = query.message.text or "" if query.message else ""
+            if resp.status_code == 200:
+                action_text = "Aprobado" if action == "appr" else "Rechazado"
+                new_text = f"{base_text}\n\n{action_text} por {approver_tag} a las {now_utc}"
+                await query.edit_message_text(text=new_text, reply_markup=None)
+            elif resp.status_code == 409:
+                detail = "Solicitud ya resuelta o expirada."
+                try:
+                    detail = resp.json().get("detail", detail)
+                except Exception:
+                    pass
+                new_text = f"{base_text}\n\n[ATENCION] {detail}"
+                await query.edit_message_text(text=new_text, reply_markup=None)
+            else:
+                logger.warning("AgentGate API callback failed: %s %s", resp.status_code, resp.text)
+                await query.edit_message_text(
+                    text=f"{base_text}\n\n[ERROR] Fallo al procesar la solicitud (HTTP {resp.status_code}).",
+                    reply_markup=None,
+                )
+        except Exception as exc:
+            logger.error("AgentGate API connection error: %s", exc)
+            base_text = query.message.text or "" if query.message else ""
+            await query.edit_message_text(
+                text=f"{base_text}\n\n[ERROR] No se pudo conectar con la API de AgentGate.",
+                reply_markup=None,
+            )
+
+
+@require_allowlist
+async def pendientes(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    backend_root = API_BASE.rsplit("/api/", 1)[0]
+    url = f"{backend_root}/agentgate/api/pending"
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        try:
+            resp = await client.get(url, headers=_headers())
+            if resp.status_code == 200:
+                items = resp.json()
+                if not items:
+                    await _send(update, "No hay solicitudes pendientes en AgentGate.")
+                    return
+                lines = ["Solicitudes pendientes de AgentGate:"]
+                for req in items:
+                    lines.append(f"- ID: {req['id'][:8]}... | Agente: {req['agent']} | Tool: {req['tool']}")
+                await _send(update, "\n".join(lines))
+            else:
+                await _send(update, f"Error al consultar pendientes (HTTP {resp.status_code}).")
+        except Exception as exc:
+            await _send(update, f"No se pudo conectar con AgentGate: {exc}")
+
+
 def build_application() -> Application:
     if not settings.TELEGRAM_BOT_TOKEN:
         raise RuntimeError("TELEGRAM_BOT_TOKEN no esta configurado en .env")
@@ -433,6 +520,10 @@ def build_application() -> Application:
     application.add_handler(CommandHandler("estado", estado))
     application.add_handler(CommandHandler("reporte", reporte))
     application.add_handler(CommandHandler("metricas", metricas))
+    application.add_handler(CommandHandler("pendientes", pendientes))
+    application.add_handler(
+        CallbackQueryHandler(on_approval_callback, pattern=r"^ag_(appr|rej)_[0-9a-f-]{36}$")
+    )
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_direct_message))
     return application
 

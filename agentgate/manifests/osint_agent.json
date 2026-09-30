@@ -1,0 +1,51 @@
+{
+  "agent": "osint_agent",
+  "project": "threatchain",
+  "version": "1.0.0",
+  "tools_allowed": [
+    {
+      "name": "greynoise",
+      "scope": "read_only",
+      "rate_limit_per_min": 20
+    },
+    {
+      "name": "alienvault_otx",
+      "scope": "read_only",
+      "rate_limit_per_min": 20
+    },
+    {
+      "name": "pulsedive",
+      "scope": "read_only",
+      "rate_limit_per_min": 15
+    },
+    {
+      "name": "phishtank",
+      "scope": "read_only",
+      "rate_limit_per_min": 20
+    },
+    {
+      "name": "haveibeenpwned",
+      "scope": "read_only",
+      "rate_limit_per_min": 10
+    }
+  ],
+  "tools_denied": [
+    "dump_database",
+    "scrape_internal_directory"
+  ],
+  "requires_approval": [
+    "notify_compromised_user"
+  ],
+  "mask_rules": [
+    {
+      "tool": "*",
+      "fields": [
+        "ioc_value",
+        "ip",
+        "target"
+      ],
+      "condition": "rfc1918_ip"
+    }
+  ],
+  "risk_level_default": "low"
+}

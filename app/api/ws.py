@@ -7,6 +7,7 @@ from sqlalchemy import select
 from app.database import AsyncSessionLocal
 from app.models.investigation import Investigation
 from app.services import progress
+from app.api.auth import validate_ws_token
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -40,6 +41,12 @@ def _is_terminal(message: dict) -> bool:
 
 @router.websocket("/ws/investigation/{investigation_id}")
 async def investigation_ws(websocket: WebSocket, investigation_id: str):
+    # Validate auth token before proceeding
+    token = websocket.query_params.get("token") or websocket.headers.get("x-api-key")
+    if not validate_ws_token(token):
+        await websocket.close(code=1008)
+        return
+
     # Validate UUID before accepting the connection
     try:
         inv_uuid = uuid.UUID(investigation_id)

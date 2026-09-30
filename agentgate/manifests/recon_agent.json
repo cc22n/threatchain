@@ -1,0 +1,59 @@
+{
+  "agent": "recon_agent",
+  "project": "threatchain",
+  "version": "1.0.0",
+  "tools_allowed": [
+    {
+      "name": "virustotal",
+      "scope": "read_only",
+      "rate_limit_per_min": 15
+    },
+    {
+      "name": "abuseipdb",
+      "scope": "read_only",
+      "rate_limit_per_min": 15
+    },
+    {
+      "name": "shodan",
+      "scope": "read_only",
+      "rate_limit_per_min": 10
+    },
+    {
+      "name": "urlscan",
+      "scope": "read_only",
+      "rate_limit_per_min": 10
+    },
+    {
+      "name": "securitytrails",
+      "scope": "read_only",
+      "rate_limit_per_min": 10
+    },
+    {
+      "name": "threatfox",
+      "scope": "read_only",
+      "rate_limit_per_min": 20
+    }
+  ],
+  "tools_denied": [
+    "isolate_host",
+    "wipe_disk",
+    "send_external_report",
+    "exploit_target"
+  ],
+  "requires_approval": [
+    "block_ip",
+    "quarantine_endpoint"
+  ],
+  "mask_rules": [
+    {
+      "tool": "*",
+      "fields": [
+        "ioc_value",
+        "ip",
+        "target"
+      ],
+      "condition": "rfc1918_ip"
+    }
+  ],
+  "risk_level_default": "low"
+}

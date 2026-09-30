@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -16,7 +17,12 @@ SYSTEM_PROMPT = (
 
 
 async def mitre_lookup(query: str, context_findings: dict | None = None) -> list[dict]:
-    docs = mitre_similarity_search(query, k=6)
+    try:
+        docs = await asyncio.to_thread(mitre_similarity_search, query, k=6)
+    except Exception as e:
+        logger.error("ChromaDB vector search failed (fallback to empty docs): %s", e)
+        docs = []
+
     if not docs:
         return []
 

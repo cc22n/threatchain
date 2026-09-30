@@ -1,0 +1,32 @@
+{
+  "agent": "vuln_agent",
+  "project": "threatchain",
+  "version": "1.0.0",
+  "tools_allowed": [
+    {
+      "name": "nvd",
+      "scope": "read_only",
+      "rate_limit_per_min": 30
+    },
+    {
+      "name": "cisa_kev",
+      "scope": "read_only",
+      "rate_limit_per_min": 30
+    },
+    {
+      "name": "exploitdb",
+      "scope": "read_only",
+      "rate_limit_per_min": 15
+    }
+  ],
+  "tools_denied": [
+    "exploit_target",
+    "metasploit_run",
+    "patch_system"
+  ],
+  "requires_approval": [
+    "trigger_vulnerability_scan"
+  ],
+  "mask_rules": [],
+  "risk_level_default": "medium"
+}

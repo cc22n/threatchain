@@ -46,24 +46,88 @@ async def lifespan(app: FastAPI):
         misfire_grace_time=3600,
     )
     scheduler.start()
+
+    # Durable AgentGate audit log: every PDP decision is also written to PostgreSQL.
+    from agentgate.audit import get_default_audit_service
+    audit_service = get_default_audit_service()
+    audit_service.configure(AsyncSessionLocal, project="threatchain")
+
+    # Persistent AgentGate approval queue in Redis (falls back to memory if Redis is unavailable)
+    from agentgate.hitl import get_default_approval_queue
+    from app.services.cache_service import get_redis_client
+    approval_queue = get_default_approval_queue()
+    approval_queue.configure(get_redis_client())
+
     yield
     scheduler.shutdown(wait=False)
+    try:
+        await audit_service.flush()
+    except Exception as e:
+        logger.warning("Error flushing AgentGate audit log: %s", e)
+    # Graceful connection pool shutdown
+    try:
+        from app.database import engine
+        await engine.dispose()
+    except Exception as e:
+        logger.warning("Error disposing database engine: %s", e)
+    try:
+        from app.services.cache_service import _redis_client
+        if _redis_client is not None:
+            _redis_client.close()
+    except Exception as e:
+        logger.warning("Error closing redis client: %s", e)
+    try:
+        from app.tools.base_tool import close_shared_client
+        await close_shared_client()
+    except Exception as e:
+        logger.warning("Error closing shared HTTP client: %s", e)
 
 
 app = FastAPI(title="ThreatChain", version="0.2.0", lifespan=lifespan)
+
+# Rate Limiter setup
+try:
+    from slowapi import _rate_limit_exceeded_handler
+    from slowapi.errors import RateLimitExceeded
+    from slowapi.middleware import SlowAPIMiddleware
+    from app.limiter import limiter
+
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    app.add_middleware(SlowAPIMiddleware)
+except Exception as e:
+    logger.warning("SlowAPI rate limiter not initialized: %s", e)
+
+
+from fastapi import Request
+from fastapi.responses import JSONResponse
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    logger.exception("Unhandled exception at %s: %s", request.url.path, exc)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "An unexpected internal server error occurred."}
+    )
+
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
 app.include_router(health_router, prefix="/api/v1")
+app.include_router(health_router)
 app.include_router(investigations_router, prefix="/api/v1")
 app.include_router(reports_router, prefix="/api/v1")
 app.include_router(ws_router)
+
+from agentgate.dashboard import agentgate_router
+app.include_router(agentgate_router, prefix="/agentgate", tags=["AgentGate"])
 
 
 if __name__ == "__main__":

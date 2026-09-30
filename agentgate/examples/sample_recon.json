@@ -1,0 +1,20 @@
+{
+  "agent": "recon_agent",
+  "project": "threatchain",
+  "version": "1.0.0",
+  "tools_allowed": [
+    {"name": "virustotal", "scope": "read_only", "rate_limit_per_min": 10},
+    {"name": "abuseipdb", "scope": "read_only", "rate_limit_per_min": 10},
+    {"name": "shodan", "scope": "read_only", "rate_limit_per_min": 5}
+  ],
+  "tools_denied": ["isolate_host", "wipe_disk", "send_external_report"],
+  "requires_approval": ["block_ip", "quarantine_endpoint"],
+  "mask_rules": [
+    {
+      "tool": "*",
+      "fields": ["ip", "ioc_value", "target"],
+      "condition": "rfc1918_ip"
+    }
+  ],
+  "risk_level_default": "low"
+}

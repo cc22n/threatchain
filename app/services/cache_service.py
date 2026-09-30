@@ -1,6 +1,7 @@
 import json
 import logging
 from typing import Any
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -19,9 +20,11 @@ class CacheService:
             logger.warning("Cache GET failed for %s: %s", key, e)
             return None
 
-    def set(self, key: str, value: Any, ttl_seconds: int = 86400) -> bool:
+    def set(self, key: str, value: Any, ttl_seconds: int | None = None) -> bool:
         if not self.redis:
             return False
+        if ttl_seconds is None:
+            ttl_seconds = getattr(settings, "CACHE_TTL_HOURS", 24) * 3600
         try:
             self.redis.setex(key, ttl_seconds, json.dumps(value, default=str))
             return True
@@ -54,24 +57,30 @@ class CacheService:
 
 
 _redis_client = None
-_redis_initialized = False
 
 
 def get_redis_client():
     """
     Return a module-level Redis client singleton.
-    The connection is established once on first call; subsequent calls
-    return the cached client without a new ping.  Returns None if Redis
-    is unavailable so callers can operate in cache-disabled mode.
+    Retries connecting if previous attempts failed.
+    Returns None if Redis is unavailable so callers can operate in cache-disabled mode.
     """
-    global _redis_client, _redis_initialized
-    if _redis_initialized:
-        return _redis_client
-    _redis_initialized = True
+    global _redis_client
+    if _redis_client is not None:
+        try:
+            _redis_client.ping()
+            return _redis_client
+        except Exception:
+            _redis_client = None
+
     try:
         import redis
-        from app.config import settings
-        client = redis.from_url(settings.REDIS_URL, decode_responses=True)
+        client = redis.from_url(
+            settings.REDIS_URL,
+            decode_responses=True,
+            socket_timeout=2.0,
+            socket_connect_timeout=2.0,
+        )
         client.ping()
         _redis_client = client
         return _redis_client

@@ -67,13 +67,9 @@ class OsintAgent(BaseAgent):
         }
         tools_to_run = tool_map.get(ioc_type, [("alienvault_otx", self.otx, {"ioc_type": ioc_type})])
 
-        for tool_name, tool, kwargs in tools_to_run:
-            try:
-                raw_results[tool_name] = await tool._arun(ioc_value, **kwargs)
-                api_calls += 1
-            except Exception as e:
-                logger.warning("Tool %s failed: %s", tool_name, e)
-                errors[tool_name] = str(e)
+        raw_results, errors, api_calls = await self._run_tools_parallel(
+            ioc_value, tools_to_run, context={"investigation_id": str(investigation_id)}
+        )
 
         prompt = f"IOC: {sanitize_for_prompt(ioc_value)} (type: {ioc_type})\n\nOSINT Data:\n{raw_results}"
         messages = [SystemMessage(content=SYSTEM_PROMPT), HumanMessage(content=prompt)]

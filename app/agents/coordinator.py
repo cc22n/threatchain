@@ -13,6 +13,7 @@ from app.agents.mitre_agent import MitreAgent
 from app.agents.report_agent import ReportAgent
 from app.chains.correlation_chain import correlate_findings
 from app.services import progress
+from app.database import AsyncSessionLocal
 
 logger = logging.getLogger(__name__)
 
@@ -57,11 +58,11 @@ class Coordinator:
         inv_id = uuid.UUID(state["investigation_id"])
         agents_to_run = IOC_AGENT_MAP.get(ioc_type, ["recon"])
 
-        agent_map = {
-            "recon": lambda: ReconAgent(self.db, self.redis_client),
-            "malware": lambda: MalwareAgent(self.db, self.redis_client),
-            "vuln": lambda: VulnAgent(self.db, self.redis_client),
-            "osint": lambda: OsintAgent(self.db, self.redis_client),
+        agent_constructors = {
+            "recon": ReconAgent,
+            "malware": MalwareAgent,
+            "vuln": VulnAgent,
+            "osint": OsintAgent,
         }
 
         def _notify_agent_done(name: str, result: dict) -> None:
@@ -73,14 +74,16 @@ class Coordinator:
             })
 
         async def _run_one(name: str) -> tuple[str, dict]:
-            agent = agent_map[name]()
-            try:
-                result = await agent.run(ioc_value, ioc_type, inv_id)
-            except Exception as e:
-                logger.error("Agent %s failed: %s", name, e)
-                result = {"error": str(e)}
-            _notify_agent_done(name, result)
-            return name, result
+            # Each concurrent task gets its own isolated AsyncSession to prevent race conditions
+            async with AsyncSessionLocal() as session:
+                agent = agent_constructors[name](session, self.redis_client)
+                try:
+                    result = await agent.run(ioc_value, ioc_type, inv_id)
+                except Exception as e:
+                    logger.error("Agent %s failed: %s", name, e)
+                    result = {"error": str(e)}
+                _notify_agent_done(name, result)
+                return name, result
 
         non_mitre = [n for n in agents_to_run if n != "mitre"]
         tasks = [_run_one(name) for name in non_mitre]

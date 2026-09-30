@@ -98,7 +98,16 @@ def poll_investigation(investigation_id, status_placeholder, agents_placeholder,
 
         try:
             resp = httpx.get(f"{API_BASE}/investigations/{investigation_id}", headers=get_headers(), timeout=10)
-            if resp.status_code == 200:
+            if resp.status_code in (401, 403):
+                status_placeholder.error(f"Authentication failed ({resp.status_code}). Check API key.")
+                break
+            elif resp.status_code == 404:
+                status_placeholder.error(f"Investigation {investigation_id} not found (404).")
+                break
+            elif resp.status_code >= 500:
+                status_placeholder.error(f"Server error ({resp.status_code}). Polling aborted.")
+                break
+            elif resp.status_code == 200:
                 data = resp.json()
                 status = data.get("status", "pending")
 

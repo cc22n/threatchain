@@ -1,5 +1,7 @@
+import asyncio
+import logging
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query, Request
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -11,7 +13,9 @@ from app.models.mitre_mapping import MitreMapping
 from app.agents.report_agent import ReportAgent
 from app.services.export_service import export_pdf, export_stix, export_markdown
 from app.api.auth import require_api_key
+from app.limiter import limiter
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -40,7 +44,8 @@ async def _get_report(investigation_id: uuid.UUID, db: AsyncSession) -> Report |
     return result.scalar_one_or_none()
 
 
-@router.get("/investigations/{investigation_id}/report")
+@router.get("/investigations/{investigation_id}/report",
+            dependencies=[Depends(require_api_key)])
 async def get_report(investigation_id: str, db: AsyncSession = Depends(get_db)):
     inv = await _get_investigation(investigation_id, db)
     report = await _get_report(inv.id, db)
@@ -57,7 +62,9 @@ async def get_report(investigation_id: str, db: AsyncSession = Depends(get_db)):
 
 @router.post("/investigations/{investigation_id}/report/regenerate", status_code=202,
              dependencies=[Depends(require_api_key)])
+@limiter.limit("10/minute")
 async def regenerate_report(
+    request: Request,
     investigation_id: str,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
@@ -79,14 +86,17 @@ async def regenerate_report(
 _VALID_FORMATS = {"md", "pdf", "stix"}
 
 
-@router.get("/investigations/{investigation_id}/report/download")
+@router.get("/investigations/{investigation_id}/report/download",
+            dependencies=[Depends(require_api_key)])
 async def download_report(
     investigation_id: str,
-    fmt: str = "md",
+    fmt: str | None = Query(default=None),
+    format: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
+    selected_fmt = (format or fmt or "md").lower()
     # Validate format before any DB work to fail fast on bad input.
-    if fmt not in _VALID_FORMATS:
+    if selected_fmt not in _VALID_FORMATS:
         raise HTTPException(status_code=422, detail="Invalid format. Use: md, pdf, stix")
 
     inv = await _get_investigation(investigation_id, db)
@@ -103,17 +113,17 @@ async def download_report(
         for m in mitre_result.scalars().all()
     ]
 
-    if fmt == "md":
+    if selected_fmt == "md":
         content = export_markdown(report.content)
         return Response(content=content, media_type="text/markdown",
                         headers={"Content-Disposition": f'attachment; filename="report_{investigation_id[:8]}.md"'})
 
-    if fmt == "pdf":
-        content = export_pdf(report.content, inv.ioc_value)
+    if selected_fmt == "pdf":
+        content = await asyncio.to_thread(export_pdf, report.content, inv.ioc_value)
         return Response(content=content, media_type="application/pdf",
                         headers={"Content-Disposition": f'attachment; filename="report_{investigation_id[:8]}.pdf"'})
 
-    # fmt == "stix"
+    # selected_fmt == "stix"
     try:
         content = export_stix(
             ioc_value=inv.ioc_value,
@@ -124,6 +134,7 @@ async def download_report(
             related_iocs=[],
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"STIX export failed: {e}")
+        logger.exception("STIX export failed for investigation %s: %s", investigation_id, e)
+        raise HTTPException(status_code=500, detail="STIX export failed due to an internal error.")
     return Response(content=content, media_type="application/json",
                     headers={"Content-Disposition": f'attachment; filename="report_{investigation_id[:8]}.stix.json"'})

@@ -55,12 +55,26 @@ async def run_investigation(
         "status": "running",
     })
 
+    from app.config import settings
+    timeout_sec = getattr(settings, "INVESTIGATION_TIMEOUT_SECONDS", 120)
+
     start = time.monotonic()
     try:
         coordinator = Coordinator(db=db, redis_client=redis_client)
-        result = await coordinator.investigate(ioc_value, resolved_type, investigation.id)
+        result = await asyncio.wait_for(
+            coordinator.investigate(ioc_value, resolved_type, investigation.id),
+            timeout=timeout_sec,
+        )
         correlation = result.get("correlation", {})
         report_findings = result.get("report", {})
+
+        # Check if the investigation was cancelled while coordinator was running
+        status_check = await db.execute(
+            select(Investigation.status).where(Investigation.id == investigation.id)
+        )
+        if status_check.scalar_one_or_none() == "cancelled":
+            logger.info("Investigation %s was cancelled by user; skipping completion write", investigation.id)
+            return investigation
 
         investigation.status = "completed"
         investigation.verdict = correlation.get("verdict", "unknown")
@@ -91,7 +105,8 @@ async def run_investigation(
         await db.rollback()
         result = await db.execute(select(Investigation).where(Investigation.id == inv_id))
         investigation = result.scalar_one()
-        investigation.status = "failed"
+        if investigation.status != "cancelled":
+            investigation.status = "failed"
         investigation.execution_time_seconds = round(time.monotonic() - start, 2)
 
     await db.commit()

@@ -28,6 +28,23 @@ URL    = "http://malware.testcategory.com/"
 CVE    = "CVE-2021-44228"    # Log4Shell
 EMAIL  = "test@example.com"
 
+HEALTHCHECK_AGENT = "healthcheck_agent"
+
+
+def register_healthcheck_manifest() -> None:
+    """Allow this diagnostic script to query every tool, in-process only (nothing is written to disk)."""
+    from agentgate.core.pdp import get_default_pdp
+    from agentgate.models.manifest import AgentManifest, ToolPermission
+
+    get_default_pdp().register_manifest(
+        AgentManifest(
+            agent=HEALTHCHECK_AGENT,
+            tools_allowed=[ToolPermission(name="*", rate_limit_per_min=1000)],
+            risk_level_default="low",
+        )
+    )
+
+
 GREEN  = "\033[92m"
 RED    = "\033[91m"
 YELLOW = "\033[93m"
@@ -36,7 +53,6 @@ BOLD   = "\033[1m"
 
 
 async def test_tool(name: str, tool_cls, ioc_value: str, **kwargs) -> dict:
-    key_env = getattr(tool_cls, "__fields__", {}).get("api_key_env") or ""
     try:
         tool_instance = tool_cls()
     except Exception as e:
@@ -49,7 +65,8 @@ async def test_tool(name: str, tool_cls, ioc_value: str, **kwargs) -> dict:
 
     start = time.monotonic()
     try:
-        result = await tool_instance._arun(ioc_value, **kwargs)
+        # Goes through AgentGate like any agent call (required in strict/production mode).
+        result = await tool_instance._arun(ioc_value, agent_name=HEALTHCHECK_AGENT, **kwargs)
         ms = int((time.monotonic() - start) * 1000)
         return {"name": name, "status": "ok", "ms": ms, "sample": _sample(result)}
     except Exception as e:
@@ -69,6 +86,7 @@ def _sample(result: dict) -> str:
 
 
 async def run_all():
+    register_healthcheck_manifest()
     from app.tools.virustotal       import VirusTotalTool
     from app.tools.abuseipdb        import AbuseIPDBTool
     from app.tools.shodan           import ShodanTool
@@ -113,7 +131,7 @@ async def run_all():
     print(f"Sample IOCs:  IP={IP}  CVE={CVE}")
     print("=" * 60)
 
-    # URLScan has a long poll time — run it in background, rest in parallel
+    # URLScan has a long poll time - run it in background, rest in parallel
     # Split URLScan out to avoid blocking everything for 40s
     urlscan_task = None
     other_tasks = []

@@ -20,7 +20,7 @@ class URLScanTool(ThreatIntelTool):
             submit = await client.post(
                 f"{self.base_url}/scan/",
                 headers=headers,
-                json={"url": ioc_value, "visibility": "public"},
+                json={"url": ioc_value, "visibility": "unlisted"},
             )
             submit.raise_for_status()
             data = submit.json()
